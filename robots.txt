@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://martinza-alejandro.github.io/Prueba-Claude-Code/sitemap.xml
