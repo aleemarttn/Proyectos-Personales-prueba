@@ -1,0 +1,96 @@
+---
+import { getCollection, render } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { pilares } from '../../data/pilares';
+import { breadcrumbList, articulo, faqPage } from '../../lib/seo';
+
+export async function getStaticPaths() {
+  const entradas = await getCollection('averias', ({ data }) => !data.draft);
+  return entradas.map((entrada) => ({
+    params: { slug: entrada.id },
+    props: { entrada },
+  }));
+}
+
+const { entrada } = Astro.props;
+const { Content } = await render(entrada);
+
+const pilar = pilares.averias;
+const site = Astro.site!;
+const urlArticulo = new URL(`/${pilar.slug}/${entrada.id}/`, site).toString();
+
+const migas = [
+  { nombre: 'Inicio', url: new URL('/', site).toString() },
+  { nombre: pilar.nombre, url: new URL(`/${pilar.slug}/`, site).toString() },
+  { nombre: entrada.data.title, url: urlArticulo },
+];
+
+const bloquesJsonLd: unknown[] = [
+  breadcrumbList(migas),
+  articulo({
+    titulo: entrada.data.title,
+    descripcion: entrada.data.description,
+    url: urlArticulo,
+    fechaPublicacion: entrada.data.pubDate.toISOString(),
+    fechaModificacion: entrada.data.updatedDate?.toISOString(),
+  }),
+];
+if (entrada.data.faq && entrada.data.faq.length > 0) {
+  bloquesJsonLd.push(faqPage(entrada.data.faq));
+}
+
+const title = `${entrada.data.title} | Mundo Astra H`;
+---
+
+<BaseLayout title={title} description={entrada.data.description}>
+  <Fragment slot="head">
+    {
+      bloquesJsonLd.map((bloque) => (
+        <script type="application/ld+json" is:inline set:html={JSON.stringify(bloque)} />
+      ))
+    }
+  </Fragment>
+
+  <nav aria-label="Migas de pan">
+    <ol>
+      <li><a href="/">Inicio</a></li>
+      <li><a href={`/${pilar.slug}/`}>{pilar.nombre}</a></li>
+      <li>{entrada.data.title}</li>
+    </ol>
+  </nav>
+
+  <article>
+    <h1>{entrada.data.title}</h1>
+
+    <dl>
+      <dt>Sistema afectado</dt>
+      <dd>{entrada.data.sistemaAfectado}</dd>
+      {
+        entrada.data.motoresAfectados && (
+          <>
+            <dt>Motores afectados</dt>
+            <dd>{entrada.data.motoresAfectados.join(', ')}</dd>
+          </>
+        )
+      }
+      <dt>Kilometraje y coste</dt>
+      <dd>{entrada.data.kilometrajeYCoste}</dd>
+    </dl>
+
+    <Content />
+
+    {
+      entrada.data.faq && entrada.data.faq.length > 0 && (
+        <section>
+          <h2>Preguntas frecuentes</h2>
+          {entrada.data.faq.map((f) => (
+            <>
+              <h3>{f.pregunta}</h3>
+              <p>{f.respuesta}</p>
+            </>
+          ))}
+        </section>
+      )
+    }
+  </article>
+</BaseLayout>

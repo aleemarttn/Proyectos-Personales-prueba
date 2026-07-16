@@ -1,0 +1,60 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { pilares } from '../../data/pilares';
+import { breadcrumbList } from '../../lib/seo';
+
+const pilar = pilares.averias;
+const site = Astro.site!;
+
+const articulos = (await getCollection('averias', ({ data }) => !data.draft)).sort(
+  (a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime(),
+);
+
+const migas = [
+  { nombre: 'Inicio', url: new URL('/', site).toString() },
+  { nombre: pilar.nombre, url: new URL(`/${pilar.slug}/`, site).toString() },
+];
+const breadcrumbLd = breadcrumbList(migas);
+
+const title = `Averías y diagnóstico del Opel Astra H: fallos frecuentes | Mundo Astra H`;
+const description =
+  'Fallos frecuentes del Opel Astra H por sistema: síntomas, kilometraje habitual de aparición y coste estimado de reparación, con guías de diagnóstico.';
+---
+
+<BaseLayout title={title} description={description}>
+  <script type="application/ld+json" slot="head" is:inline set:html={JSON.stringify(breadcrumbLd)} />
+
+  <nav aria-label="Migas de pan">
+    <ol>
+      <li><a href="/">Inicio</a></li>
+      <li>{pilar.nombre}</li>
+    </ol>
+  </nav>
+
+  <h1>Averías y diagnóstico del Opel Astra H</h1>
+
+  <p>
+    El Opel Astra H (2004–2010) tiene un conjunto de averías recurrentes bien
+    conocidas por sus propietarios. En esta sección reunimos los fallos más
+    habituales organizados por sistema del vehículo, indicando en cada caso los
+    síntomas característicos, el kilometraje en el que suelen aparecer y una
+    estimación del coste de reparación.
+  </p>
+  <p>
+    El objetivo es que puedas identificar rápidamente qué le ocurre a tu coche y
+    llegar al taller con una idea clara del problema y de lo que debería costar
+    solucionarlo.
+  </p>
+
+  <h2>Averías documentadas</h2>
+  <ul>
+    {
+      articulos.map((articulo) => (
+        <li>
+          <a href={`/${pilar.slug}/${articulo.id}/`}>{articulo.data.title}</a>
+        </li>
+      ))
+    }
+  </ul>
+</BaseLayout>
