@@ -1,0 +1,46 @@
+---
+import type { Pilar } from '../data/pilares';
+
+interface ArticuloResumen {
+  id: string;
+  title: string;
+}
+
+interface Props {
+  pilar: Pilar;
+  articulos: ArticuloResumen[];
+}
+
+const { pilar, articulos } = Astro.props;
+---
+
+<nav aria-label="Migas de pan">
+  <ol class="crumbs">
+    <li><a href="/">Inicio</a></li>
+    <li><span class="sep">/</span><span aria-current="page">{pilar.nombre}</span></li>
+  </ol>
+</nav>
+
+<h1 class="titulo-pagina">{pilar.nombre} del Opel Astra H</h1>
+
+<div class="prosa">
+  {pilar.intro.map((parrafo) => <p>{parrafo}</p>)}
+</div>
+
+<h2 style="margin-top:2rem;">Artículos de esta sección</h2>
+{
+  articulos.length > 0 ? (
+    <ul class="lista-articulos">
+      {articulos.map((a) => (
+        <li>
+          <a href={`/${pilar.slug}/${a.id}/`}>{a.title}</a>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <p class="vacio">
+      Estamos preparando el contenido de esta sección. Vuelve pronto: iremos publicando
+      guías verificadas del {pilar.nombre.toLowerCase()} del Opel Astra H.
+    </p>
+  )
+}

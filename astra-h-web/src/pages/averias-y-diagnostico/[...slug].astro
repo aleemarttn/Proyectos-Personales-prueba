@@ -42,7 +42,7 @@ if (entrada.data.faq && entrada.data.faq.length > 0) {
 const title = `${entrada.data.title} | Mundo Astra H`;
 ---
 
-<BaseLayout title={title} description={entrada.data.description}>
+<BaseLayout title={title} description={entrada.data.description} seccion="averias">
   <Fragment slot="head">
     {
       bloquesJsonLd.map((bloque) => (
@@ -52,42 +52,48 @@ const title = `${entrada.data.title} | Mundo Astra H`;
   </Fragment>
 
   <nav aria-label="Migas de pan">
-    <ol>
+    <ol class="crumbs">
       <li><a href="/">Inicio</a></li>
-      <li><a href={`/${pilar.slug}/`}>{pilar.nombre}</a></li>
-      <li>{entrada.data.title}</li>
+      <li><span class="sep">/</span><a href={`/${pilar.slug}/`}>{pilar.nombre}</a></li>
+      <li><span class="sep">/</span><span aria-current="page">{entrada.data.title}</span></li>
     </ol>
   </nav>
 
   <article>
-    <h1>{entrada.data.title}</h1>
+    <h1 class="titulo-pagina">{entrada.data.title}</h1>
 
-    <dl>
-      <dt>Sistema afectado</dt>
-      <dd>{entrada.data.sistemaAfectado}</dd>
+    <div class="ficha">
+      <div class="ficha__celda">
+        <p class="ficha__k">Sistema afectado</p>
+        <p class="ficha__v">{entrada.data.sistemaAfectado}</p>
+      </div>
       {
         entrada.data.motoresAfectados && (
-          <>
-            <dt>Motores afectados</dt>
-            <dd>{entrada.data.motoresAfectados.join(', ')}</dd>
-          </>
+          <div class="ficha__celda">
+            <p class="ficha__k">Motores afectados</p>
+            <p class="ficha__v">{entrada.data.motoresAfectados.join(' · ')}</p>
+          </div>
         )
       }
-      <dt>Kilometraje y coste</dt>
-      <dd>{entrada.data.kilometrajeYCoste}</dd>
-    </dl>
+      <div class="ficha__celda">
+        <p class="ficha__k">Kilometraje y coste</p>
+        <p class="ficha__v">{entrada.data.kilometrajeYCoste}</p>
+      </div>
+    </div>
 
-    <Content />
+    <div class="prosa">
+      <Content />
+    </div>
 
     {
       entrada.data.faq && entrada.data.faq.length > 0 && (
-        <section>
+        <section class="faq">
           <h2>Preguntas frecuentes</h2>
           {entrada.data.faq.map((f) => (
-            <>
+            <div class="faq__item">
               <h3>{f.pregunta}</h3>
               <p>{f.respuesta}</p>
-            </>
+            </div>
           ))}
         </section>
       )

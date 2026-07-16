@@ -1,12 +1,18 @@
 ---
+import '../styles/global.css';
+import { pilares, ordenPilares } from '../data/pilares';
+
 interface Props {
   title: string;
   description: string;
+  /** Clave del pilar activo (para resaltar el menú). Opcional. */
+  seccion?: string;
 }
 
-const { title, description } = Astro.props;
+const { title, description, seccion } = Astro.props;
 
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
+const anyo = new Date().getFullYear();
 ---
 
 <!doctype html>
@@ -23,6 +29,39 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site);
     <slot name="head" />
   </head>
   <body>
-    <slot />
+    <header class="site-header">
+      <div class="site-header__inner">
+        <a class="brand" href="/">
+          <span class="brand__mark" aria-hidden="true">AH</span>
+          Mundo Astra H
+        </a>
+        <nav class="site-nav" aria-label="Secciones">
+          {
+            ordenPilares.map((clave) => {
+              const p = pilares[clave];
+              return (
+                <a
+                  href={`/${p.slug}/`}
+                  aria-current={seccion === clave ? 'page' : undefined}
+                >
+                  {p.nombre}
+                </a>
+              );
+            })
+          }
+        </nav>
+      </div>
+    </header>
+
+    <main class="site-main">
+      <slot />
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer__inner">
+        <span>Mundo Astra H · Guías técnicas del Opel Astra H (2004–2010)</span>
+        <span>© {anyo}</span>
+      </div>
+    </footer>
   </body>
 </html>

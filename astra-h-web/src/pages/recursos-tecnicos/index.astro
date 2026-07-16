@@ -5,10 +5,10 @@ import PilarIndice from '../../components/PilarIndice.astro';
 import { pilares } from '../../data/pilares';
 import { breadcrumbList } from '../../lib/seo';
 
-const pilar = pilares.averias;
+const pilar = pilares.recursos;
 const site = Astro.site!;
 
-const articulos = (await getCollection('averias', ({ data }) => !data.draft))
+const articulos = (await getCollection('recursos', ({ data }) => !data.draft))
   .sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
   .map((a) => ({ id: a.id, title: a.data.title }));
 
@@ -17,10 +17,10 @@ const breadcrumbLd = breadcrumbList([
   { nombre: pilar.nombre, url: new URL(`/${pilar.slug}/`, site).toString() },
 ]);
 
-const title = `${pilar.nombre} del Opel Astra H: fallos frecuentes | Mundo Astra H`;
+const title = `${pilar.nombre} del Opel Astra H: esquemas y manuales | Mundo Astra H`;
 ---
 
-<BaseLayout title={title} description={pilar.descripcionSeo} seccion="averias">
+<BaseLayout title={title} description={pilar.descripcionSeo} seccion="recursos">
   <script type="application/ld+json" slot="head" is:inline set:html={JSON.stringify(breadcrumbLd)} />
   <PilarIndice pilar={pilar} articulos={articulos} />
 </BaseLayout>

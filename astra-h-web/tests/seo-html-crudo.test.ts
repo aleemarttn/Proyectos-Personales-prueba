@@ -35,14 +35,14 @@ interface RutaCritica {
  * JSON-LD y su mínimo de texto estrictos.
  */
 const RUTAS_CRITICAS: RutaCritica[] = [
-  // Home: aún sin contenido editorial definitivo; se endurecerá cuando lo tenga.
-  { path: '/', jsonLdRequerido: [], textoMinimo: 0 },
-  // Página índice del pilar Averías y diagnóstico.
-  {
-    path: '/averias-y-diagnostico/',
-    jsonLdRequerido: ['BreadcrumbList'],
-    textoMinimo: 300,
-  },
+  // Home con intro y tarjetas de pilares.
+  { path: '/', jsonLdRequerido: [], textoMinimo: 250 },
+  // Páginas índice de los 5 pilares del silo.
+  { path: '/averias-y-diagnostico/', jsonLdRequerido: ['BreadcrumbList'], textoMinimo: 300 },
+  { path: '/motorizaciones/', jsonLdRequerido: ['BreadcrumbList'], textoMinimo: 250 },
+  { path: '/variantes-de-carroceria/', jsonLdRequerido: ['BreadcrumbList'], textoMinimo: 250 },
+  { path: '/mantenimiento-preventivo/', jsonLdRequerido: ['BreadcrumbList'], textoMinimo: 250 },
+  { path: '/recursos-tecnicos/', jsonLdRequerido: ['BreadcrumbList'], textoMinimo: 250 },
   // Artículo piloto: fallo de bobinas de encendido.
   {
     path: '/averias-y-diagnostico/bobinas-de-encendido/',

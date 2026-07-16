@@ -1,10 +1,38 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import { pilares, ordenPilares } from '../data/pilares';
+
+const title = 'Opel Astra H: guías, averías y mantenimiento | Mundo Astra H';
+const description =
+  'Guías técnicas verificadas sobre el Opel Astra H (2004-2010): averías frecuentes, motorizaciones, mantenimiento preventivo y recursos técnicos.';
 ---
 
-<BaseLayout
-  title="Opel Astra H: guías, averías y mantenimiento | Mundo Astra H"
-  description="Guías técnicas verificadas sobre el Opel Astra H (2004-2010): averías frecuentes, motorizaciones, mantenimiento preventivo y recursos técnicos."
->
-  <h1>Mundo Astra H</h1>
+<BaseLayout title={title} description={description}>
+  <section class="hero">
+    <p class="eyebrow">Opel Astra H · 2004–2010</p>
+    <h1 class="titulo-pagina">Todo sobre el Opel Astra H, sin perderte en foros</h1>
+    <p>
+      Guías técnicas verificadas para propietarios, compradores de segunda mano y
+      aficionados al mantenimiento casero. Averías frecuentes, análisis de motores,
+      variantes OPC y GTC, calendarios de mantenimiento y recursos técnicos, todo
+      organizado y fácil de consultar.
+    </p>
+  </section>
+
+  <ul class="grid-pilares">
+    {
+      ordenPilares.map((clave) => {
+        const p = pilares[clave];
+        return (
+          <li>
+            <a class="card-pilar" href={`/${p.slug}/`}>
+              <h2>{p.nombre}</h2>
+              <p>{p.descripcion}</p>
+              <span class="flecha" aria-hidden="true">Ver sección →</span>
+            </a>
+          </li>
+        );
+      })
+    }
+  </ul>
 </BaseLayout>
