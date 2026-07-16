@@ -1,10 +1,22 @@
 ---
+import { getCollection } from 'astro:content';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { pilares, ordenPilares } from '../data/pilares';
 
 const title = 'Opel Astra H: guías, averías y mantenimiento | Mundo Astra H';
 const description =
   'Guías técnicas verificadas sobre el Opel Astra H (2004-2010): averías frecuentes, motorizaciones, mantenimiento preventivo y recursos técnicos.';
+
+// Último contenido publicado. Por ahora solo el pilar Averías tiene artículos
+// y plantilla de artículo; se ampliará al resto de pilares cuando la tengan.
+const ultimos = (await getCollection('averias', ({ data }) => !data.draft))
+  .sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
+  .slice(0, 3)
+  .map((a) => ({
+    title: a.data.title,
+    description: a.data.description,
+    url: `/${pilares.averias.slug}/${a.id}/`,
+  }));
 ---
 
 <BaseLayout title={title} description={description}>
@@ -35,4 +47,49 @@ const description =
       })
     }
   </ul>
+
+  <section class="seccion-home">
+    <h2>Por qué Mundo Astra H</h2>
+    <ul class="features">
+      <li class="feature">
+        <h3>Datos verificados</h3>
+        <p>
+          Cada guía se apoya en datos técnicos y en la experiencia real de propietarios,
+          con las fuentes a la vista. Nada de textos genéricos copiados de otros sitios.
+        </p>
+      </li>
+      <li class="feature">
+        <h3>Organizado por sistema</h3>
+        <p>
+          El contenido se estructura por sistema del coche y por motor, para que encuentres
+          en segundos lo que en un foro te llevaría media hora de búsqueda.
+        </p>
+      </li>
+      <li class="feature">
+        <h3>Sin ruido de foros</h3>
+        <p>
+          Sin hilos interminables ni respuestas contradictorias: la información esencial,
+          ordenada y lista para consultar cuando la necesitas.
+        </p>
+      </li>
+    </ul>
+  </section>
+
+  {
+    ultimos.length > 0 && (
+      <section class="seccion-home">
+        <h2>Último contenido</h2>
+        <ul class="destacados">
+          {ultimos.map((a) => (
+            <li>
+              <a href={a.url}>
+                <h3>{a.title}</h3>
+                <p>{a.description}</p>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )
+  }
 </BaseLayout>
