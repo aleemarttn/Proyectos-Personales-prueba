@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Equipo — Gestión Fútbol</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar" id="cabecera"></div>
+    <nav class="tabs" id="tabs"></nav>
+
+    <div class="card">
+      <div class="card-header">
+        <h2>Plantilla y estadísticas</h2>
+        <div class="acciones">
+          <button class="btn pequeno" id="btn-nuevo">+ Jugador</button>
+          <button class="btn pequeno" id="btn-export">Exportar CSV</button>
+        </div>
+      </div>
+      <div id="contenido"><div class="cargando">Cargando plantilla</div></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+  App.iniciar({ tab: "equipo" }).then(async (ctx) => {
+    const db = App.db;
+    const $cont = document.getElementById("contenido");
+
+    // ---- Estado ----
+    let POSICIONES = [];         // catálogo [{code,label,line,sort_order}]
+    let JUGADORES = [];          // filas fusionadas: player + stats + asistencia + lesión abierta
+    let orden = { col: "dorsal", dir: "asc" };
+
+    const posLabel = (code) => (POSICIONES.find(p => p.code === code) || {}).label || code || "—";
+
+    // ===================================================================
+    //  CARGA DE DATOS
+    // ===================================================================
+    async function cargarTodo() {
+      const tid = App.teamId();
+      const [posRes, plaRes, statRes, asisRes, injRes] = await Promise.all([
+        db.from("positions").select("*").order("sort_order"),
+        db.from("players").select("*").eq("team_id", tid),
+        db.from("v_estadisticas_jugador").select("*").eq("team_id", tid),
+        db.from("v_asistencia_entrenamientos").select("*").eq("team_id", tid),
+        db.from("injuries").select("*").eq("team_id", tid).is("end_date", null),
+      ]);
+
+      for (const r of [posRes, plaRes, statRes, asisRes, injRes]) {
+        if (r.error) { console.error(r.error); App.toast("Error cargando datos.", "error"); }
+      }
+
+      POSICIONES = posRes.data || [];
+      const stats = statRes.data || [];
+      const asis  = asisRes.data || [];
+      const injs  = injRes.data || [];
+
+      // Fusionar por player_id
+      JUGADORES = (plaRes.data || []).map(p => {
+        const s = stats.find(x => x.player_id === p.id) || {};
+        const a = asis.find(x => x.player_id === p.id) || {};
+        const lesionAbierta = injs.find(x => x.player_id === p.id) || null;
+        return {
+          ...p,
+          partidos_convocado: s.partidos_convocado || 0,
+          partidos_titular:   s.partidos_titular || 0,
+          minutos_totales:    s.minutos_totales || 0,
+          goles:              s.goles || 0,
+          asistencias:        s.asistencias || 0,
+          amarillas:          s.amarillas || 0,
+          rojas:              s.rojas || 0,
+          pct_asistencia:     a.porcentaje_asistencia,
+          lesionado:          !!lesionAbierta,
+          lesionAbierta,
+        };
+      });
+    }
+
+    // ===================================================================
+    //  TABLA DE ESTADÍSTICAS (ordenable)
+    // ===================================================================
+    const COLUMNAS = [
+      { key: "name",               etq: "Jugador",  tipo: "txt", align: "left" },
+      { key: "shirt_number",       etq: "Dorsal",   tipo: "num", align: "centro" },
+      { key: "primary_position",   etq: "Pos.",     tipo: "txt", align: "centro" },
+      { key: "partidos_convocado", etq: "PJ",       tipo: "num", align: "centro" },
+      { key: "partidos_titular",   etq: "Titular",  tipo: "num", align: "centro" },
+      { key: "minutos_totales",    etq: "Min",      tipo: "num", align: "centro" },
+      { key: "goles",              etq: "Gol",      tipo: "num", align: "centro" },
+      { key: "asistencias",        etq: "Asist",    tipo: "num", align: "centro" },
+      { key: "amarillas",          etq: "Amar",     tipo: "num", align: "centro" },
+      { key: "rojas",              etq: "Roja",     tipo: "num", align: "centro" },
+      { key: "pct_asistencia",     etq: "% Asis",   tipo: "num", align: "centro" },
+    ];
+
+    function jugadoresOrdenados() {
+      const activos = JUGADORES.filter(j => j.active);
+      const bajas   = JUGADORES.filter(j => !j.active);
+      const cmp = (a, b) => {
+        let va = a[orden.col], vb = b[orden.col];
+        if (orden.col === "primary_position") { va = posLabel(va); vb = posLabel(vb); }
+        if (va === null || va === undefined) va = orden.dir === "asc" ? Infinity : -Infinity;
+        if (vb === null || vb === undefined) vb = orden.dir === "asc" ? Infinity : -Infinity;
+        if (typeof va === "string") { const r = va.localeCompare(vb, "es"); return orden.dir === "asc" ? r : -r; }
+        return orden.dir === "asc" ? va - vb : vb - va;
+      };
+      // Los dados de baja siempre al final
+      return [...activos.sort(cmp), ...bajas.sort(cmp)];
+    }
+
+    function pintarTabla() {
+      if (JUGADORES.length === 0) {
+        App.vacio($cont, {
+          emoji: "👥",
+          titulo: "Aún no has añadido jugadores",
+          texto: "Empieza dando de alta a tu plantilla para ver aquí sus estadísticas.",
+          accionHTML: '<button class="btn primario" onclick="document.getElementById(\'btn-nuevo\').click()">+ Añadir jugador</button>'
+        });
+        return;
+      }
+
+      const filas = jugadoresOrdenados().map(j => {
+        const asis = j.pct_asistencia === null || j.pct_asistencia === undefined
+          ? '<span class="muted">—</span>' : App.num(j.pct_asistencia, 0) + "%";
+        const nombre = App.esc(j.name)
+          + (j.lesionado ? ' <span class="badge danger">Lesionado</span>' : "")
+          + (!j.active ? ' <span class="badge">Baja</span>' : "");
+        return `
+          <tr class="pulsable" data-id="${j.id}">
+            <td>${nombre}</td>
+            <td class="centro">${j.shirt_number ?? '<span class="muted">—</span>'}</td>
+            <td class="centro"><span class="pos-tag">${App.esc(j.primary_position || "—")}</span></td>
+            <td class="centro">${j.partidos_convocado}</td>
+            <td class="centro">${j.partidos_titular}</td>
+            <td class="centro">${App.num(j.minutos_totales)}</td>
+            <td class="centro">${j.goles}</td>
+            <td class="centro">${j.asistencias}</td>
+            <td class="centro">${j.amarillas}</td>
+            <td class="centro">${j.rojas}</td>
+            <td class="centro">${asis}</td>
+          </tr>`;
+      }).join("");
+
+      const ths = COLUMNAS.map(c => {
+        const act = orden.col === c.key ? orden.dir : "";
+        const flecha = orden.col === c.key ? (orden.dir === "asc" ? "▲" : "▼") : "▲";
+        return `<th class="orden ${c.align === 'centro' ? 'centro' : ''} ${act}" data-col="${c.key}">
+                  ${c.etq}<span class="flecha">${flecha}</span></th>`;
+      }).join("");
+
+      $cont.innerHTML = `
+        <div class="tabla-wrap">
+          <table class="datos">
+            <thead><tr>${ths}</tr></thead>
+            <tbody>${filas}</tbody>
+          </table>
+        </div>
+        <p class="muted mt-2" style="font-size:.8rem">Toca un jugador para ver su ficha. Toca una cabecera para ordenar.</p>`;
+
+      // Ordenar al pulsar cabecera
+      $cont.querySelectorAll("th.orden").forEach(th => {
+        th.addEventListener("click", () => {
+          const col = th.dataset.col;
+          if (orden.col === col) orden.dir = orden.dir === "asc" ? "desc" : "asc";
+          else { orden.col = col; orden.dir = (col === "name" || col === "primary_position") ? "asc" : "desc"; }
+          pintarTabla();
+        });
+      });
+      // Abrir ficha
+      $cont.querySelectorAll("tr.pulsable").forEach(tr => {
+        tr.addEventListener("click", () => abrirFicha(tr.dataset.id));
+      });
+    }
+
+    // ===================================================================
+    //  ALTA / EDICIÓN DE JUGADOR
+    // ===================================================================
+    function formJugadorHTML(j = {}) {
+      const opciones = POSICIONES.map(p =>
+        `<option value="${p.code}" ${j.primary_position === p.code ? "selected" : ""}>${App.esc(p.label)}</option>`
+      ).join("");
+      const pie = (v) => j.dominant_foot === v ? "selected" : "";
+      return `
+        <label class="campo" for="f-nombre">Nombre *</label>
+        <input id="f-nombre" type="text" value="${App.esc(j.name || "")}" required />
+        <div class="fila-form">
+          <div>
+            <label class="campo" for="f-dorsal">Dorsal</label>
+            <input id="f-dorsal" type="number" min="1" max="99" value="${j.shirt_number ?? ""}" />
+          </div>
+          <div>
+            <label class="campo" for="f-pos">Posición natural</label>
+            <select id="f-pos"><option value="">—</option>${opciones}</select>
+          </div>
+        </div>
+        <div class="fila-form">
+          <div>
+            <label class="campo" for="f-nac">Fecha de nacimiento</label>
+            <input id="f-nac" type="date" value="${j.birth_date || ""}" />
+          </div>
+          <div>
+            <label class="campo" for="f-pie">Pie dominante</label>
+            <select id="f-pie">
+              <option value="">—</option>
+              <option value="derecho" ${pie("derecho")}>Derecho</option>
+              <option value="izquierdo" ${pie("izquierdo")}>Izquierdo</option>
+              <option value="ambidiestro" ${pie("ambidiestro")}>Ambidiestro</option>
+            </select>
+          </div>
+        </div>
+        <p class="error-texto mt-2" id="f-error"></p>
+        <div class="acciones mt-3">
+          <button class="btn primario" id="f-guardar">${j.id ? "Guardar cambios" : "Añadir jugador"}</button>
+          ${j.id ? `<button class="btn peligro" id="f-baja">${j.active ? "Dar de baja" : "Reactivar"}</button>` : ""}
+        </div>`;
+    }
+
+    function abrirFormJugador(j = {}) {
+      const m = App.modal({
+        titulo: j.id ? "Editar jugador" : "Nuevo jugador",
+        contenido: formJugadorHTML(j),
+        onMontar(cuerpo, cerrar) {
+          cuerpo.querySelector("#f-guardar").addEventListener("click", async () => {
+            const nombre = cuerpo.querySelector("#f-nombre").value.trim();
+            const err = cuerpo.querySelector("#f-error");
+            if (!nombre) { err.textContent = "El nombre es obligatorio."; return; }
+            const dorsalRaw = cuerpo.querySelector("#f-dorsal").value;
+            const datos = {
+              team_id: App.teamId(),
+              name: nombre,
+              shirt_number: dorsalRaw === "" ? null : Number(dorsalRaw),
+              primary_position: cuerpo.querySelector("#f-pos").value || null,
+              birth_date: cuerpo.querySelector("#f-nac").value || null,
+              dominant_foot: cuerpo.querySelector("#f-pie").value || null,
+            };
+            cuerpo.querySelector("#f-guardar").disabled = true;
+            let error;
+            if (j.id) ({ error } = await db.from("players").update(datos).eq("id", j.id));
+            else       ({ error } = await db.from("players").insert(datos));
+            if (error) {
+              cuerpo.querySelector("#f-guardar").disabled = false;
+              err.textContent = error.message.includes("players_dorsal_unico")
+                ? "Ese dorsal ya lo tiene otro jugador activo."
+                : "No se pudo guardar: " + error.message;
+              return;
+            }
+            cerrar();
+            App.toast(j.id ? "Jugador actualizado." : "Jugador añadido.", "ok");
+            await cargarTodo(); pintarTabla();
+          });
+
+          const btnBaja = cuerpo.querySelector("#f-baja");
+          if (btnBaja) btnBaja.addEventListener("click", async () => {
+            const nuevoEstado = !j.active;
+            const ok = await App.confirmar({
+              titulo: nuevoEstado ? "Reactivar jugador" : "Dar de baja",
+              mensaje: nuevoEstado
+                ? "El jugador volverá a la plantilla activa."
+                : "El jugador saldrá de la plantilla activa pero se conserva todo su historial. Su dorsal quedará libre.",
+              textoOk: nuevoEstado ? "Reactivar" : "Dar de baja",
+              peligro: !nuevoEstado,
+            });
+            if (!ok) return;
+            const { error } = await db.from("players").update({ active: nuevoEstado }).eq("id", j.id);
+            if (error) { App.toast("No se pudo cambiar el estado.", "error"); return; }
+            cerrar();
+            App.toast(nuevoEstado ? "Jugador reactivado." : "Jugador dado de baja.", "ok");
+            await cargarTodo(); pintarTabla();
+          });
+        }
+      });
+    }
+
+    // ===================================================================
+    //  FICHA INDIVIDUAL
+    // ===================================================================
+    async function abrirFicha(playerId) {
+      const j = JUGADORES.find(x => x.id === playerId);
+      if (!j) return;
+      const tid = App.teamId();
+
+      const m = App.modal({ titulo: j.name, contenido: '<div class="cargando">Cargando ficha</div>' });
+
+      // Datos de la ficha en paralelo
+      const [minPosRes, apps, injuriesRes, asisMotivoRes] = await Promise.all([
+        db.from("v_minutos_por_posicion").select("*").eq("player_id", playerId),
+        db.from("appearances")
+          .select("minutes_played, role, matches!inner(match_date, opponent, status)")
+          .eq("player_id", playerId),
+        db.from("injuries").select("*").eq("player_id", playerId).order("start_date", { ascending: false }),
+        db.from("v_asistencia_por_motivo").select("*").eq("player_id", playerId),
+      ]);
+
+      const minPos = minPosRes.data || [];
+      const jugados = (apps.data || [])
+        .filter(a => a.matches && a.matches.status === "jugado")
+        .sort((a, b) => a.matches.match_date.localeCompare(b.matches.match_date));
+      const injuries = injuriesRes.data || [];
+      const asisMotivo = (asisMotivoRes.data || []).sort((a, b) => b.sesiones - a.sesiones);
+
+      const edadTxt = j.birth_date ? `${App.edad(j.birth_date)} años` : "—";
+      const pieTxt = j.dominant_foot ? j.dominant_foot[0].toUpperCase() + j.dominant_foot.slice(1) : "—";
+
+      m.cuerpo.innerHTML = `
+        <div class="grid-cards mb-0" style="grid-template-columns:repeat(auto-fill,minmax(120px,1fr))">
+          <div class="stat"><div class="valor">${j.shirt_number ?? "—"}</div><div class="etq">Dorsal</div></div>
+          <div class="stat"><div class="valor" style="font-size:1.1rem">${App.esc(posLabel(j.primary_position))}</div><div class="etq">Posición</div></div>
+          <div class="stat"><div class="valor">${App.num(j.minutos_totales)}</div><div class="etq">Minutos</div></div>
+          <div class="stat"><div class="valor">${j.partidos_titular}</div><div class="etq">Titular</div></div>
+          <div class="stat"><div class="valor">${j.goles}</div><div class="etq">Goles</div></div>
+          <div class="stat"><div class="valor">${j.asistencias}</div><div class="etq">Asist.</div></div>
+        </div>
+        <p class="muted mt-2" style="font-size:.84rem">
+          ${edadTxt} · Pie ${pieTxt} · ${j.amarillas} amar. · ${j.rojas} roja(s)
+          ${j.pct_asistencia != null ? " · " + App.num(j.pct_asistencia,0) + "% asistencia" : ""}
+        </p>
+
+        <div class="acciones mt-2">
+          <button class="btn pequeno" id="fi-editar">Editar datos</button>
+          <button class="btn pequeno" id="fi-lesion">+ Lesión</button>
+        </div>
+
+        <h3 class="mt-3">Reparto de minutos por posición</h3>
+        ${minPos.length ? '<canvas id="ch-pos" height="160"></canvas>'
+          : '<p class="muted">Aún sin minutos registrados en partidos jugados.</p>'}
+
+        <h3 class="mt-3">Evolución de minutos por jornada</h3>
+        ${jugados.length ? '<canvas id="ch-evo" height="160"></canvas>'
+          : '<p class="muted">Aún sin partidos jugados.</p>'}
+
+        <h3 class="mt-3">Lesiones</h3>
+        <div id="fi-lesiones"></div>
+
+        ${asisMotivo.length ? `<h3 class="mt-3">Asistencia por motivo</h3>
+          <div class="tabla-wrap"><table class="datos" style="min-width:auto">
+            <tbody>${asisMotivo.map(a => `<tr><td>${App.esc(a.motivo)}</td><td class="centro">${a.sesiones}</td></tr>`).join("")}</tbody>
+          </table></div>` : ""}
+      `;
+
+      // Gráfico: minutos por posición (barra horizontal)
+      if (minPos.length) {
+        new Chart(m.cuerpo.querySelector("#ch-pos"), {
+          type: "bar",
+          data: {
+            labels: minPos.map(p => p.posicion),
+            datasets: [{ data: minPos.map(p => p.minutos), backgroundColor: "#e2231a", borderRadius: 4 }]
+          },
+          options: {
+            indexAxis: "y", responsive: true,
+            plugins: { legend: { display: false },
+              tooltip: { callbacks: { label: (c) => `${c.parsed.x} min` } } },
+            scales: {
+              x: { ticks: { color: "#90a6c6" }, grid: { color: "#244269" } },
+              y: { ticks: { color: "#f3f7fd" }, grid: { display: false } }
+            }
+          }
+        });
+      }
+
+      // Gráfico: evolución de minutos (escala category en X con fechas string)
+      if (jugados.length) {
+        new Chart(m.cuerpo.querySelector("#ch-evo"), {
+          type: "line",
+          data: {
+            labels: jugados.map(a => App.fechaBonita(a.matches.match_date)),
+            datasets: [{
+              data: jugados.map(a => a.minutes_played),
+              borderColor: "#e2231a", backgroundColor: "rgba(226,35,26,.2)",
+              fill: true, tension: .25, pointRadius: 3
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { display: false },
+              tooltip: { callbacks: {
+                title: (items) => jugados[items[0].dataIndex].matches.opponent,
+                label: (c) => `${c.parsed.y} min`
+              } } },
+            scales: {
+              x: { type: "category", ticks: { color: "#90a6c6", maxRotation: 0, autoSkip: true }, grid: { display: false } },
+              y: { beginAtZero: true, suggestedMax: 90, ticks: { color: "#90a6c6" }, grid: { color: "#244269" } }
+            }
+          }
+        });
+      }
+
+      pintarLesiones(m.cuerpo.querySelector("#fi-lesiones"), injuries, playerId, m);
+
+      m.cuerpo.querySelector("#fi-editar").addEventListener("click", () => { m.cerrar(); abrirFormJugador(j); });
+      m.cuerpo.querySelector("#fi-lesion").addEventListener("click", () => abrirFormLesion(playerId, m));
+    }
+
+    // ===================================================================
+    //  LESIONES
+    // ===================================================================
+    function pintarLesiones(cont, injuries, playerId, modalFicha) {
+      if (!injuries.length) { cont.innerHTML = '<p class="muted">Sin lesiones registradas.</p>'; return; }
+      cont.innerHTML = injuries.map(l => {
+        const abierta = !l.end_date;
+        const rango = App.fechaBonita(l.start_date) + (l.end_date ? " → " + App.fechaBonita(l.end_date) : " → en curso");
+        return `
+          <div class="card plano" style="padding:12px; margin-bottom:8px; background:var(--bg-2)">
+            <div style="display:flex; justify-content:space-between; gap:8px; align-items:center">
+              <div>
+                <strong>${App.esc(l.injury_type || "Lesión")}</strong>
+                ${abierta ? '<span class="badge danger">Activa</span>' : '<span class="badge ok">Recuperado</span>'}
+                <div class="muted" style="font-size:.82rem">
+                  ${App.esc(l.body_zone || "")} ${l.severity ? "· " + App.esc(l.severity) : ""}<br>${rango}
+                  ${l.expected_return_date && abierta ? "<br>Vuelta prevista: " + App.fechaBonita(l.expected_return_date) : ""}
+                </div>
+              </div>
+              ${abierta ? `<button class="btn pequeno" data-cerrar="${l.id}">Dar el alta</button>` : ""}
+            </div>
+          </div>`;
+      }).join("");
+
+      cont.querySelectorAll("[data-cerrar]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const ok = await App.confirmar({
+            titulo: "Dar el alta médica",
+            mensaje: "Se cerrará la lesión con fecha de hoy y el jugador volverá a estar disponible.",
+            textoOk: "Dar el alta",
+          });
+          if (!ok) return;
+          const { error } = await db.from("injuries").update({ end_date: App.hoyISO() }).eq("id", btn.dataset.cerrar);
+          if (error) { App.toast("No se pudo cerrar la lesión.", "error"); return; }
+          App.toast("Alta registrada.", "ok");
+          modalFicha.cerrar();
+          await cargarTodo(); pintarTabla();
+          abrirFicha(playerId);
+        });
+      });
+    }
+
+    function abrirFormLesion(playerId, modalFicha) {
+      App.modal({
+        titulo: "Registrar lesión",
+        contenido: `
+          <div class="fila-form">
+            <div><label class="campo" for="l-inicio">Fecha de inicio *</label>
+              <input id="l-inicio" type="date" value="${App.hoyISO()}" /></div>
+            <div><label class="campo" for="l-vuelta">Vuelta prevista</label>
+              <input id="l-vuelta" type="date" /></div>
+          </div>
+          <div class="fila-form">
+            <div><label class="campo" for="l-tipo">Tipo</label>
+              <input id="l-tipo" type="text" placeholder="Rotura, esguince…" /></div>
+            <div><label class="campo" for="l-zona">Zona</label>
+              <input id="l-zona" type="text" placeholder="Rodilla, isquios…" /></div>
+          </div>
+          <label class="campo" for="l-sev">Gravedad</label>
+          <select id="l-sev">
+            <option value="">—</option>
+            <option value="leve">Leve</option>
+            <option value="moderada">Moderada</option>
+            <option value="grave">Grave</option>
+          </select>
+          <label class="campo" for="l-notas">Notas</label>
+          <textarea id="l-notas"></textarea>
+          <p class="error-texto mt-2" id="l-error"></p>
+          <div class="acciones mt-3"><button class="btn primario" id="l-guardar">Guardar lesión</button></div>`,
+        onMontar(cuerpo, cerrar) {
+          cuerpo.querySelector("#l-guardar").addEventListener("click", async () => {
+            const inicio = cuerpo.querySelector("#l-inicio").value;
+            if (!inicio) { cuerpo.querySelector("#l-error").textContent = "La fecha de inicio es obligatoria."; return; }
+            const { error } = await db.from("injuries").insert({
+              team_id: App.teamId(), player_id: playerId,
+              start_date: inicio,
+              expected_return_date: cuerpo.querySelector("#l-vuelta").value || null,
+              injury_type: cuerpo.querySelector("#l-tipo").value.trim() || null,
+              body_zone: cuerpo.querySelector("#l-zona").value.trim() || null,
+              severity: cuerpo.querySelector("#l-sev").value || null,
+              notes: cuerpo.querySelector("#l-notas").value.trim() || null,
+            });
+            if (error) { cuerpo.querySelector("#l-error").textContent = "No se pudo guardar: " + error.message; return; }
+            cerrar();
+            App.toast("Lesión registrada.", "ok");
+            if (modalFicha) modalFicha.cerrar();
+            await cargarTodo(); pintarTabla();
+            abrirFicha(playerId);
+          });
+        }
+      });
+    }
+
+    // ===================================================================
+    //  EXPORTACIÓN CSV
+    // ===================================================================
+    function exportar() {
+      const filas = jugadoresOrdenados().map(j => ({
+        Jugador: j.name,
+        Dorsal: j.shirt_number ?? "",
+        Posicion: posLabel(j.primary_position),
+        Pie: j.dominant_foot || "",
+        Nacimiento: j.birth_date || "",
+        Estado: j.active ? "Activo" : "Baja",
+        Partidos_convocado: j.partidos_convocado,
+        Titularidades: j.partidos_titular,
+        Minutos: j.minutos_totales,
+        Goles: j.goles,
+        Asistencias: j.asistencias,
+        Amarillas: j.amarillas,
+        Rojas: j.rojas,
+        Pct_asistencia_entrenos: j.pct_asistencia ?? "",
+      }));
+      App.exportarCSV(filas, `plantilla_${App.hoyISO()}`);
+    }
+
+    // ---- Eventos globales ----
+    document.getElementById("btn-nuevo").addEventListener("click", () => abrirFormJugador());
+    document.getElementById("btn-export").addEventListener("click", exportar);
+
+    // ---- Arranque ----
+    await cargarTodo();
+    pintarTabla();
+  });
+  </script>
+</body>
+</html>

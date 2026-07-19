@@ -1,0 +1,1557 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Partidos — Gestión Fútbol</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* ---- Pizarra de alineación ---- */
+    .pizarra-cols { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    @media (min-width: 780px) {
+      .pizarra-cols { grid-template-columns: minmax(0, 420px) 1fr; align-items: start; }
+    }
+    .campo-wrap {
+      width: 100%; max-width: 420px; margin: 0 auto;
+      background: var(--cesped);
+      border: 1px solid var(--border);
+      border-radius: var(--radio);
+      overflow: hidden;
+    }
+    .campo-svg { display: block; width: 100%; height: auto; touch-action: none; }
+    .campo-svg text {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    /* Camiseta / ranura */
+    .slot { cursor: grab; }
+    .slot:active { cursor: grabbing; }
+    .slot .jersey-num { font-weight: 800; fill: #fff; text-anchor: middle; dominant-baseline: central; }
+    .slot .jersey-name { fill: #fff; text-anchor: middle; font-weight: 700; letter-spacing: -.1px; }
+    .slot .name-pill { fill: rgba(8,20,36,.82); }
+    /* Etiqueta de posición sobre la ficha. Clase propia (NO .pos-tag, que en
+       styles.css es un badge HTML con font-size en rem que el viewBox dispara). */
+    .slot .jersey-pos { fill: var(--warn); font-weight: 800; text-anchor: middle; }
+    .slot .cap-badge { fill: #f2b84b; stroke: rgba(0,0,0,.45); stroke-width: .4px; }
+    .slot .cap-letter { fill: #1a1200; font-weight: 800; text-anchor: middle; dominant-baseline: central; }
+    .slot.vacia { cursor: pointer; }
+    .slot.vacia .jersey-shape { fill: rgba(255,255,255,.12); stroke: rgba(255,255,255,.6); stroke-dasharray: 2 2; }
+    .slot.vacia .jersey-num { fill: rgba(255,255,255,.9); }
+    .slot.vacia .name-pill { fill: rgba(8,20,36,.55); }
+    .slot.aviso .jersey-shape { stroke: var(--warn); stroke-width: 1.4px; }
+
+    /* Panel de selección de jugador (escritorio: al lado; móvil: modal) */
+    .lista-jug { max-height: 340px; overflow-y: auto; }
+    .jug-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border-radius: var(--radio-sm);
+      cursor: pointer; border: 1px solid transparent;
+    }
+    .jug-item:hover { background: var(--bg-2); }
+    .jug-item.alineado { opacity: .55; }
+    .jug-item.alineado .badge.dorsal { background: var(--accent); color: #fff; }
+    .jug-item .info { min-width: 0; flex: 1; }
+    .jug-item .info .nom { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .jug-item .info .sub { font-size: .78rem; color: var(--muted); }
+
+    /* Sub-pestañas del detalle de partido */
+    .subtabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 16px; }
+    .subtabs button {
+      padding: 8px 14px; border-radius: var(--radio-sm);
+      border: 1px solid var(--border); background: var(--card); color: var(--muted);
+      font-weight: 700; font-size: .85rem; cursor: pointer;
+    }
+    .subtabs button.activa { background: var(--card-2); color: var(--text); border-color: var(--accent); }
+    .subtabs button:disabled { opacity: .45; cursor: not-allowed; }
+    .subtabs .paso { display: inline-flex; align-items: center; justify-content: center;
+      width: 18px; height: 18px; border-radius: 50%; background: var(--bg-2);
+      font-size: .72rem; margin-right: 6px; }
+
+    /* Cabecera de partido */
+    .match-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .match-head .marcador { font-size: 1.8rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .match-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+    /* Panel Once + banquillo (a la derecha de la pizarra) */
+    .of-linea { margin-bottom: 8px; }
+    .of-tit { display: block; font-size: .68rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .4px; color: var(--muted); margin-bottom: 3px; }
+    .of-jug { display: inline-flex; align-items: center; gap: 5px;
+      background: var(--bg-2); border: 1px solid var(--border); border-radius: 999px;
+      padding: 3px 10px; margin: 0 5px 5px 0; font-size: .82rem; }
+    .of-jug b { font-variant-numeric: tabular-nums; }
+    .of-jug .of-pos { font-size: .68rem; color: var(--warn); font-weight: 800; }
+    .of-sep { border: none; border-top: 1px solid var(--border); margin: 12px 0 10px; }
+    .of-vacio { color: var(--muted); font-size: .82rem; }
+
+    /* Post-partido: tarjeta compacta */
+    .pp-card { padding: 12px 14px; background: var(--bg-2); border-radius: var(--radio-sm);
+      border: 1px solid var(--border); margin-bottom: 8px; }
+    .pp-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .pp-top .pp-nom { flex: 1; min-width: 110px; font-weight: 700; line-height: 1.15; }
+    .pp-top .pp-rol { font-size: .72rem; color: var(--muted); font-weight: 600; }
+    .pp-min { display: flex; gap: 5px; align-items: center; }
+    .pp-min label { font-size: .72rem; color: var(--muted); }
+    .pp-min input { width: 58px; padding: 6px 8px; }
+    .pp-sub { display: flex; gap: 8px; align-items: flex-end; margin-top: 8px; flex-wrap: wrap; }
+    .pp-sub .campo-min { display: flex; flex-direction: column; gap: 3px; }
+    .pp-sub .campo-min label { font-size: .72rem; color: var(--muted); }
+    .pp-sub .campo-min input { width: 92px; padding: 6px 8px; }
+    .pp-pos-row { display: flex; gap: 6px; margin-top: 6px; }
+    .pp-pos-row select { flex: 1; padding: 7px 8px; }
+    .pp-pos-row input { width: 66px; padding: 7px 8px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar" id="cabecera"></div>
+    <nav class="tabs" id="tabs"></nav>
+    <div id="vista"><div class="cargando">Cargando</div></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+  App.iniciar({ tab: "partidos" }).then(async (ctx) => {
+    const db = App.db;
+    const $vista = document.getElementById("vista");
+
+    // ---- Catálogos cacheados ----
+    let POSICIONES = [], FORMACIONES = [], SLOTS_POR_FORMACION = {}, PLAYERS = [], REASONS = [];
+    const posLabel  = (c) => (POSICIONES.find(p => p.code === c) || {}).label || c || "";
+    const reasonLabel = (c) => (REASONS.find(r => r.code === c) || {}).label || c || "";
+    const apellido  = (nombre) => { const p = String(nombre || "").trim().split(/\s+/); return p[p.length - 1] || ""; };
+    const jugadorPorId = (id) => PLAYERS.find(p => p.id === id);
+    const DURACION_PARTIDO = 90; // minutos de referencia para precargas del post-partido
+
+    async function cargarCatalogos() {
+      const tid = App.teamId();
+      const [posR, forR, slotR, plaR, reaR] = await Promise.all([
+        db.from("positions").select("*").order("sort_order"),
+        db.from("formations").select("*").eq("active", true).order("name"),
+        db.from("formation_slots").select("*"),
+        db.from("players").select("id, name, shirt_number, primary_position, active").eq("team_id", tid).eq("active", true),
+        db.from("match_absence_reasons").select("*"),
+      ]);
+      POSICIONES = posR.data || [];
+      FORMACIONES = forR.data || [];
+      PLAYERS = (plaR.data || []).sort((a, b) => (a.shirt_number ?? 999) - (b.shirt_number ?? 999));
+      REASONS = reaR.data || [];
+      SLOTS_POR_FORMACION = {};
+      for (const s of (slotR.data || [])) {
+        (SLOTS_POR_FORMACION[s.formation_id] ||= []).push(s);
+      }
+    }
+
+    // ===================================================================
+    //  ROUTER simple por ?id=
+    // ===================================================================
+    function matchIdActual() {
+      return new URLSearchParams(location.search).get("id");
+    }
+    function irA(id) {
+      const url = id ? `partidos.html?id=${id}` : "partidos.html";
+      history.pushState({}, "", url);
+      router();
+    }
+    window.addEventListener("popstate", router);
+
+    async function router() {
+      await cargarCatalogos();
+      const id = matchIdActual();
+      if (id) renderDetalle(id);
+      else renderLista();
+    }
+
+    // ===================================================================
+    //  VISTA LISTA DE PARTIDOS
+    // ===================================================================
+    async function renderLista() {
+      $vista.innerHTML = '<div class="cargando">Cargando partidos</div>';
+      const { data: matches, error } = await db
+        .from("matches").select("*").eq("team_id", App.teamId())
+        .order("match_date", { ascending: false });
+      if (error) { App.toast("Error cargando partidos.", "error"); console.error(error); return; }
+
+      const cabecera = `
+        <div class="card-header">
+          <h2>Partidos</h2>
+          <div class="acciones">
+            <button class="btn pequeno" id="btn-nuevo">+ Partido</button>
+            <button class="btn pequeno" id="btn-calendario">📅 Calendario</button>
+            <button class="btn pequeno" id="btn-export">Exportar CSV</button>
+          </div>
+        </div>`;
+
+      if (!matches || matches.length === 0) {
+        $vista.innerHTML = `<div class="card">${cabecera}</div>`;
+        const cont = document.createElement("div"); cont.className = "card";
+        App.vacio(cont, {
+          emoji: "📅", titulo: "Aún no hay partidos",
+          texto: "Crea el primer partido de la temporada, o pega el calendario entero de una vez.",
+          accionHTML: '<div class="acciones" style="justify-content:center"><button class="btn primario" id="btn-nuevo2">+ Crear partido</button><button class="btn" id="btn-cal2">📅 Pegar calendario</button></div>'
+        });
+        $vista.appendChild(cont);
+        document.getElementById("btn-nuevo").onclick = () => formPartido();
+        document.getElementById("btn-calendario").onclick = () => formCalendario();
+        document.getElementById("btn-nuevo2").onclick = () => formPartido();
+        document.getElementById("btn-cal2").onclick = () => formCalendario();
+        return;
+      }
+
+      const filaPartido = (m) => {
+        const res = m.status === "jugado" && m.goals_for != null
+          ? `<strong>${m.goals_for}-${m.goals_against}</strong>` : "—";
+        const badgeEstado = {
+          programado: '<span class="badge info">Programado</span>',
+          jugado: '<span class="badge ok">Jugado</span>',
+          aplazado: '<span class="badge warn">Aplazado</span>',
+        }[m.status] || "";
+        const sede = m.venue === "casa"
+          ? '<span class="badge">Casa</span>' : '<span class="badge">Fuera</span>';
+        return `
+          <tr class="pulsable" data-id="${m.id}">
+            <td>${App.fechaCorta(m.match_date)}</td>
+            <td>${App.esc(m.opponent)}</td>
+            <td class="centro">${sede}</td>
+            <td class="centro">${res}</td>
+            <td class="centro">${badgeEstado}</td>
+          </tr>`;
+      };
+
+      const hoy = App.hoyISO();
+      // Próximos: aún no jugados y con fecha de hoy en adelante (cronológico).
+      // Pasados: el resto (jugados y los que ya pasaron sin cerrar), más nuevo primero.
+      const proximos = matches.filter(m => m.status !== "jugado" && m.match_date >= hoy)
+        .sort((a, b) => a.match_date.localeCompare(b.match_date));
+      const pasados = matches.filter(m => !(m.status !== "jugado" && m.match_date >= hoy))
+        .sort((a, b) => b.match_date.localeCompare(a.match_date));
+
+      const tabla = (titulo, arr, vacioTxt) => `
+        <div class="card">
+          <div class="card-header"><h2>${titulo} <span class="badge">${arr.length}</span></h2></div>
+          ${arr.length ? `
+          <div class="tabla-wrap">
+            <table class="datos">
+              <thead><tr>
+                <th>Fecha</th><th>Rival</th><th class="centro">Sede</th>
+                <th class="centro">Result.</th><th class="centro">Estado</th>
+              </tr></thead>
+              <tbody>${arr.map(filaPartido).join("")}</tbody>
+            </table>
+          </div>` : `<p class="muted" style="margin:0">${vacioTxt}</p>`}
+        </div>`;
+
+      $vista.innerHTML = `
+        <div class="card">${cabecera}</div>
+        ${tabla("Próximos", proximos, "No hay partidos programados. Usa 📅 Calendario para cargarlos.")}
+        ${tabla("Pasados", pasados, "Todavía no se ha jugado ningún partido.")}`;
+
+      $vista.querySelectorAll("tr.pulsable").forEach(tr =>
+        tr.addEventListener("click", () => irA(tr.dataset.id)));
+      document.getElementById("btn-nuevo").onclick = () => formPartido();
+      document.getElementById("btn-calendario").onclick = () => formCalendario();
+      document.getElementById("btn-export").onclick = () => exportarPartidos(matches);
+    }
+
+    // ===================================================================
+    //  CALENDARIO: alta masiva de partidos (pegar toda la temporada)
+    //  Una línea por partido. Separadores admitidos: coma, punto y coma o
+    //  tabulador (así se puede pegar desde una hoja de cálculo).
+    //    fecha ; rival ; casa|fuera ; hora(opcional) ; competición(opcional)
+    //  Ejemplos de fecha: 2026-09-12  ó  12/09/2026
+    // ===================================================================
+    function parseFechaLibre(txt) {
+      const s = String(txt || "").trim();
+      let mm = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (mm) return `${mm[1]}-${mm[2].padStart(2,"0")}-${mm[3].padStart(2,"0")}`;
+      mm = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
+      if (mm) return `${mm[3]}-${mm[2].padStart(2,"0")}-${mm[1].padStart(2,"0")}`;
+      return null;
+    }
+    function parseCalendario(texto) {
+      const filas = [], errores = [];
+      const lineas = String(texto || "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      lineas.forEach((linea, i) => {
+        const partes = linea.split(/[;,\t]/).map(p => p.trim());
+        const fecha = parseFechaLibre(partes[0]);
+        const rival = partes[1] || "";
+        if (!fecha || !rival) { errores.push(`Línea ${i + 1}: falta fecha válida o rival.`); return; }
+        let sede = (partes[2] || "casa").toLowerCase();
+        if (sede.startsWith("f")) sede = "fuera"; else sede = "casa";
+        const hora = (partes[3] || "").match(/^\d{1,2}:\d{2}$/) ? partes[3] : null;
+        const comp = partes[4] || null;
+        filas.push({ match_date: fecha, opponent: rival, venue: sede, kickoff_time: hora, competition: comp, status: "programado" });
+      });
+      return { filas, errores };
+    }
+    function formCalendario() {
+      App.modal({
+        titulo: "Pegar calendario",
+        contenido: `
+          <p class="muted" style="font-size:.84rem; margin-top:0">
+            Una línea por partido, con este orden (separa con coma, «;» o tabulador,
+            así puedes pegarlo desde Excel):
+          </p>
+          <p style="font-size:.82rem; background:var(--bg-2); border:1px solid var(--border); border-radius:8px; padding:8px 10px">
+            <code>fecha ; rival ; casa/fuera ; hora ; competición</code><br>
+            <span class="muted">Solo fecha y rival son obligatorios. Fecha: 2026-09-12 o 12/09/2026.</span>
+          </p>
+          <textarea id="cal-txt" style="min-height:150px" placeholder="2026-09-12 ; UD Realejo ; fuera ; 18:30 ; Liga
+2026-09-19 ; CD Marino ; casa ; 12:00 ; Liga
+26/09/2026 ; At. Victoria ; fuera"></textarea>
+          <div id="cal-preview" class="muted" style="font-size:.82rem; margin-top:8px"></div>
+          <p class="error-texto mt-2" id="cal-error"></p>
+          <div class="acciones mt-3"><button class="btn primario" id="cal-guardar">Añadir partidos</button></div>`,
+        onMontar(cuerpo, cerrar) {
+          const ta = cuerpo.querySelector("#cal-txt");
+          const prev = cuerpo.querySelector("#cal-preview");
+          const err = cuerpo.querySelector("#cal-error");
+          const refrescar = () => {
+            const { filas, errores } = parseCalendario(ta.value);
+            prev.textContent = filas.length ? `Se añadirán ${filas.length} partido(s).` : "Escribe o pega el calendario arriba.";
+            err.textContent = errores.slice(0, 4).join(" ");
+          };
+          ta.addEventListener("input", refrescar); refrescar();
+          cuerpo.querySelector("#cal-guardar").addEventListener("click", async () => {
+            const { filas, errores } = parseCalendario(ta.value);
+            if (!filas.length) { err.textContent = errores[0] || "No hay partidos válidos que añadir."; return; }
+            const btn = cuerpo.querySelector("#cal-guardar");
+            btn.disabled = true; btn.textContent = "Añadiendo…";
+            const conTeam = filas.map(f => ({ ...f, team_id: App.teamId() }));
+            const { error } = await db.from("matches").insert(conTeam);
+            btn.disabled = false; btn.textContent = "Añadir partidos";
+            if (error) { err.textContent = "No se pudieron añadir: " + error.message; console.error(error); return; }
+            cerrar(); App.toast(`${filas.length} partido(s) añadidos al calendario.`, "ok"); router();
+          });
+        }
+      });
+    }
+
+    function exportarPartidos(matches) {
+      const filas = matches.map(m => ({
+        Fecha: m.match_date, Hora: m.kickoff_time || "", Rival: m.opponent,
+        Sede: m.venue, Competicion: m.competition || "", Estado: m.status,
+        Goles_favor: m.goals_for ?? "", Goles_contra: m.goals_against ?? "",
+        Notas: m.notes || "",
+      }));
+      App.exportarCSV(filas, `partidos_${App.hoyISO()}`);
+    }
+
+    // ===================================================================
+    //  ALTA / EDICIÓN DE PARTIDO
+    // ===================================================================
+    function formPartido(m = {}) {
+      const v = (x) => x === "casa" || x === "fuera" ? (m.venue === x ? "selected" : "") : "";
+      const est = (x) => m.status === x ? "selected" : "";
+      App.modal({
+        titulo: m.id ? "Editar partido" : "Nuevo partido",
+        contenido: `
+          <div class="fila-form">
+            <div><label class="campo" for="p-fecha">Fecha *</label>
+              <input id="p-fecha" type="date" value="${m.match_date || App.hoyISO()}" /></div>
+            <div><label class="campo" for="p-hora">Hora</label>
+              <input id="p-hora" type="time" value="${m.kickoff_time || ""}" /></div>
+          </div>
+          <label class="campo" for="p-rival">Rival *</label>
+          <input id="p-rival" type="text" value="${App.esc(m.opponent || "")}" placeholder="Nombre del equipo rival" />
+          <div class="fila-form">
+            <div><label class="campo" for="p-sede">Sede</label>
+              <select id="p-sede"><option value="casa" ${v("casa")}>Casa</option><option value="fuera" ${v("fuera")}>Fuera</option></select></div>
+            <div><label class="campo" for="p-comp">Competición</label>
+              <input id="p-comp" type="text" value="${App.esc(m.competition || "")}" placeholder="Liga, Copa…" /></div>
+          </div>
+          <label class="campo" for="p-estado">Estado</label>
+          <select id="p-estado">
+            <option value="programado" ${est("programado")}>Programado</option>
+            <option value="jugado" ${est("jugado")}>Jugado</option>
+            <option value="aplazado" ${est("aplazado")}>Aplazado</option>
+          </select>
+          <div class="fila-form" id="p-goles-wrap" style="${m.status === 'jugado' ? '' : 'display:none'}">
+            <div><label class="campo" for="p-gf">Goles a favor</label>
+              <input id="p-gf" type="number" min="0" value="${m.goals_for ?? ""}" /></div>
+            <div><label class="campo" for="p-gc">Goles en contra</label>
+              <input id="p-gc" type="number" min="0" value="${m.goals_against ?? ""}" /></div>
+          </div>
+          <label class="campo" for="p-notas">Notas</label>
+          <textarea id="p-notas">${App.esc(m.notes || "")}</textarea>
+          <p class="error-texto mt-2" id="p-error"></p>
+          <div class="acciones mt-3">
+            <button class="btn primario" id="p-guardar">${m.id ? "Guardar" : "Crear partido"}</button>
+            ${m.id ? '<button class="btn peligro" id="p-borrar">Eliminar</button>' : ""}
+          </div>`,
+        onMontar(cuerpo, cerrar) {
+          const selEstado = cuerpo.querySelector("#p-estado");
+          selEstado.addEventListener("change", () => {
+            cuerpo.querySelector("#p-goles-wrap").style.display = selEstado.value === "jugado" ? "" : "none";
+          });
+          cuerpo.querySelector("#p-guardar").addEventListener("click", async () => {
+            const rival = cuerpo.querySelector("#p-rival").value.trim();
+            const fecha = cuerpo.querySelector("#p-fecha").value;
+            const err = cuerpo.querySelector("#p-error");
+            if (!fecha || !rival) { err.textContent = "Fecha y rival son obligatorios."; return; }
+            const estado = selEstado.value;
+            const gf = cuerpo.querySelector("#p-gf").value;
+            const gc = cuerpo.querySelector("#p-gc").value;
+            const datos = {
+              team_id: App.teamId(), match_date: fecha,
+              kickoff_time: cuerpo.querySelector("#p-hora").value || null,
+              opponent: rival, venue: cuerpo.querySelector("#p-sede").value,
+              competition: cuerpo.querySelector("#p-comp").value.trim() || null,
+              status: estado,
+              goals_for: estado === "jugado" && gf !== "" ? Number(gf) : null,
+              goals_against: estado === "jugado" && gc !== "" ? Number(gc) : null,
+              notes: cuerpo.querySelector("#p-notas").value.trim() || null,
+            };
+            let error, nuevoId = m.id;
+            if (m.id) ({ error } = await db.from("matches").update(datos).eq("id", m.id));
+            else {
+              const r = await db.from("matches").insert(datos).select("id").single();
+              error = r.error; nuevoId = r.data && r.data.id;
+            }
+            if (error) { err.textContent = "No se pudo guardar: " + error.message; return; }
+            cerrar();
+            App.toast(m.id ? "Partido actualizado." : "Partido creado.", "ok");
+            if (m.id) router(); else irA(nuevoId);
+          });
+          const btnBorrar = cuerpo.querySelector("#p-borrar");
+          if (btnBorrar) btnBorrar.addEventListener("click", async () => {
+            const ok = await App.confirmar({
+              titulo: "Eliminar partido",
+              mensaje: "Se borrará el partido y toda su alineación, convocatoria y eventos. No se puede deshacer.",
+              textoOk: "Eliminar", peligro: true,
+            });
+            if (!ok) return;
+            const { error } = await db.from("matches").delete().eq("id", m.id);
+            if (error) { App.toast("No se pudo eliminar.", "error"); return; }
+            cerrar(); App.toast("Partido eliminado.", "ok"); irA(null);
+          });
+        }
+      });
+    }
+
+    // ===================================================================
+    //  VISTA DETALLE DE PARTIDO
+    //  Sub-pestañas ordenadas por el momento real de uso:
+    //    1) Convocatoria (se anuncia antes del partido)
+    //    2) Alineación   (el 11 + al guardar, el post-partido inline)
+    // ===================================================================
+    async function renderDetalle(id) {
+      $vista.innerHTML = '<div class="cargando">Cargando partido</div>';
+      const { data: m, error } = await db.from("matches").select("*").eq("id", id).single();
+      if (error || !m) { App.toast("No se encontró el partido.", "error"); irA(null); return; }
+
+      const res = m.status === "jugado" && m.goals_for != null
+        ? `<span class="marcador">${m.goals_for} - ${m.goals_against}</span>` : "";
+      const sede = m.venue === "casa" ? "en casa" : "a domicilio";
+
+      $vista.innerHTML = `
+        <div class="card">
+          <div class="card-header">
+            <button class="btn pequeno" id="btn-volver">← Partidos</button>
+            <button class="btn pequeno" id="btn-editar">Editar partido</button>
+          </div>
+          <div class="match-head">
+            <div style="flex:1; min-width:0">
+              <h2 style="margin-bottom:4px">${App.esc(m.opponent)}</h2>
+              <div class="match-line muted" style="font-size:.9rem">
+                <span>${App.fechaBonita(m.match_date)}</span>
+                ${m.kickoff_time ? `<span>· ${m.kickoff_time.slice(0,5)}</span>` : ""}
+                <span>· ${sede}</span>
+                ${m.competition ? `<span>· ${App.esc(m.competition)}</span>` : ""}
+              </div>
+            </div>
+            ${res}
+          </div>
+        </div>
+
+        <div class="subtabs">
+          <button class="activa" data-sub="convocatoria"><span class="paso">1</span>Convocatoria</button>
+          <button data-sub="alineacion"><span class="paso">2</span>Alineación y minutos</button>
+          <button data-sub="eventos"><span class="paso">3</span>Eventos</button>
+        </div>
+
+        <div id="sub-contenido"></div>`;
+
+      document.getElementById("btn-volver").onclick = () => irA(null);
+      document.getElementById("btn-editar").onclick = () => formPartido(m);
+
+      const renders = {
+        convocatoria: renderConvocatoria,
+        alineacion: renderAlineacion,
+        eventos: renderEventos,
+      };
+      $vista.querySelectorAll(".subtabs button").forEach(b => {
+        b.addEventListener("click", () => {
+          $vista.querySelectorAll(".subtabs button").forEach(x => x.classList.remove("activa"));
+          b.classList.add("activa");
+          renders[b.dataset.sub](m);
+        });
+      });
+      renderConvocatoria(m);
+    }
+
+    // ===================================================================
+    //  CONVOCATORIA  (paso 1)
+    //  Solo importan dos estados: CONVOCADO o NO CONVOCADO (con motivo).
+    //  Titular / suplente / minutos NO se deciden aquí: eso es de la
+    //  alineación y el post-partido. Por defecto, los lesionados con
+    //  lesión abierta salen como "no convocado (lesión)"; el resto,
+    //  convocados.
+    // ===================================================================
+    async function renderConvocatoria(m) {
+      const cont = document.getElementById("sub-contenido");
+      cont.innerHTML = '<div class="cargando">Cargando convocatoria</div>';
+
+      const [appR, injR] = await Promise.all([
+        db.from("appearances").select("player_id, role, absence_reason_code").eq("match_id", m.id),
+        db.from("injuries").select("player_id").eq("team_id", App.teamId()).is("end_date", null),
+      ]);
+      const apps = appR.data || [];
+      const lesionados = new Set((injR.data || []).map(x => x.player_id));
+
+      // Estado por jugador: ui = "si" (convocado) | "no" (no convocado)
+      // dbRole conserva el rol real ya cerrado (titular/suplente_*) para no
+      // pisarlo al re-guardar la convocatoria de un partido ya jugado.
+      const CONVO = {};
+      for (const p of PLAYERS) {
+        const ap = apps.find(a => a.player_id === p.id);
+        if (ap) {
+          CONVO[p.id] = {
+            ui: ap.role === "no_convocado" ? "no" : "si",
+            reason: ap.absence_reason_code || null,
+            dbRole: ap.role,
+          };
+        } else if (lesionados.has(p.id)) {
+          CONVO[p.id] = { ui: "no", reason: "lesion", dbRole: null };
+        } else {
+          CONVO[p.id] = { ui: "si", reason: null, dbRole: null };
+        }
+      }
+
+      const opcionesReason = REASONS.map(r => `<option value="${r.code}">${App.esc(r.label)}</option>`).join("");
+
+      function filaJugador(p) {
+        const c = CONVO[p.id];
+        const btn = (val, txt) => `<button type="button" class="btn pequeno ${c.ui === val ? "primario" : ""}" data-set="${val}" data-pid="${p.id}">${txt}</button>`;
+        return `
+          <div class="card plano" style="padding:12px; background:var(--bg-2); margin-bottom:8px" data-row="${p.id}">
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap">
+              <span class="badge dorsal">${p.shirt_number ?? "—"}</span>
+              <div style="flex:1; min-width:120px">
+                <div style="font-weight:700">${App.esc(p.name)}</div>
+                <div class="muted" style="font-size:.78rem">${App.esc(posLabel(p.primary_position) || "")}${lesionados.has(p.id) ? " · lesionado" : ""}</div>
+              </div>
+              <div class="acciones">${btn("si","Convocado")}${btn("no","No convocado")}</div>
+            </div>
+            <div class="reason-wrap" data-reason-for="${p.id}" style="${c.ui === "no" ? "" : "display:none"}; margin-top:8px">
+              <select data-reason="${p.id}">${opcionesReason}</select>
+            </div>
+          </div>`;
+      }
+
+      const nConv = Object.values(CONVO).filter(c => c.ui === "si").length;
+
+      cont.innerHTML = `
+        <div class="card">
+          <div class="card-header">
+            <h2>Convocatoria <span class="badge" id="cnt-convo">${nConv} convocados</span></h2>
+            <div class="acciones">
+              <button class="btn pequeno" id="btn-todos-conv">Todos convocados</button>
+              <button class="btn primario pequeno" id="btn-guardar-convo">Guardar convocatoria</button>
+            </div>
+          </div>
+          <p class="muted" style="font-size:.82rem; margin-top:0">
+            Marca solo quién entra en la lista. Titulares, suplentes y minutos
+            se deciden luego en <strong>Alineación y minutos</strong>.
+          </p>
+          <div id="lista-convo">${PLAYERS.map(filaJugador).join("")}</div>
+        </div>`;
+
+      // Preseleccionar motivo actual en cada select
+      for (const p of PLAYERS) {
+        const sel = cont.querySelector(`[data-reason="${p.id}"]`);
+        if (sel && CONVO[p.id].reason) sel.value = CONVO[p.id].reason;
+      }
+
+      const actualizarContador = () => {
+        const n = Object.values(CONVO).filter(c => c.ui === "si").length;
+        cont.querySelector("#cnt-convo").textContent = `${n} convocados`;
+      };
+
+      // Botones convocado / no convocado
+      cont.querySelectorAll("[data-set]").forEach(b => {
+        b.addEventListener("click", () => {
+          const pid = b.dataset.pid, val = b.dataset.set;
+          CONVO[pid].ui = val;
+          const fila = cont.querySelector(`[data-row="${pid}"]`);
+          fila.querySelectorAll("[data-set]").forEach(x =>
+            x.classList.toggle("primario", x.dataset.set === val));
+          fila.querySelector(`[data-reason-for="${pid}"]`).style.display = val === "no" ? "" : "none";
+          actualizarContador();
+        });
+      });
+      cont.querySelectorAll("[data-reason]").forEach(sel => {
+        sel.addEventListener("change", () => { CONVO[sel.dataset.reason].reason = sel.value; });
+      });
+      document.getElementById("btn-todos-conv").addEventListener("click", () => {
+        for (const p of PLAYERS) {
+          CONVO[p.id].ui = "si";
+          const fila = cont.querySelector(`[data-row="${p.id}"]`);
+          fila.querySelectorAll("[data-set]").forEach(x => x.classList.toggle("primario", x.dataset.set === "si"));
+          fila.querySelector(`[data-reason-for="${p.id}"]`).style.display = "none";
+        }
+        actualizarContador();
+        App.toast("Todos marcados como convocados.", "ok");
+      });
+
+      document.getElementById("btn-guardar-convo").addEventListener("click", async () => {
+        // Validar motivos de los no convocados
+        for (const p of PLAYERS) {
+          const c = CONVO[p.id];
+          if (c.ui === "no") {
+            const sel = cont.querySelector(`[data-reason="${p.id}"]`);
+            c.reason = sel.value;
+            if (!c.reason) { App.toast(`Falta el motivo de ausencia de ${p.name}.`, "warn"); return; }
+          }
+        }
+        const jugados = ["titular", "suplente_jugo", "suplente_no_jugo"];
+        const filas = PLAYERS.map(p => {
+          const c = CONVO[p.id];
+          let role;
+          if (c.ui === "no") role = "no_convocado";
+          // Convocado: si ya tenía un rol de partido cerrado, se conserva;
+          // si no, queda como "suplente sin jugar" a la espera del cierre.
+          else role = jugados.includes(c.dbRole) ? c.dbRole : "suplente_no_jugo";
+          return {
+            match_id: m.id, player_id: p.id, role,
+            absence_reason_code: c.ui === "no" ? c.reason : null,
+          };
+        });
+        const btn = document.getElementById("btn-guardar-convo");
+        btn.disabled = true; btn.textContent = "Guardando…";
+        const { error } = await db.from("appearances")
+          .upsert(filas, { onConflict: "match_id,player_id" });
+        btn.disabled = false; btn.textContent = "Guardar convocatoria";
+        if (error) { App.toast("Error al guardar la convocatoria.", "error"); console.error(error); return; }
+        App.toast("Convocatoria guardada.", "ok");
+      });
+    }
+
+    // ===================================================================
+    //  ALINEACIÓN (paso 2) + POST-PARTIDO inline
+    // ===================================================================
+    // Estado de la pizarra
+    // asign:   slotId -> playerId
+    // pos:     slotId -> {x,y} personalizada (si se movió la ficha)
+    // posCode: slotId -> code de posición elegida para esa ficha
+    let PIZ = { match: null, formationId: null, asign: {}, pos: {}, posCode: {}, captain: null };
+    let CONVOCADOS = new Set(); // player_ids convocados (para el banquillo del panel)
+
+    async function renderAlineacion(m) {
+      PIZ = { match: m, formationId: null, asign: {}, pos: {}, posCode: {}, captain: null };
+      const cont = document.getElementById("sub-contenido");
+      cont.innerHTML = '<div class="cargando">Cargando alineación</div>';
+
+      // Alineación guardada + convocados (para pintar el banquillo)
+      const [lupR, appR] = await Promise.all([
+        db.from("lineups").select("id, formation_id, captain_player_id").eq("match_id", m.id).maybeSingle(),
+        db.from("appearances").select("player_id, role").eq("match_id", m.id),
+      ]);
+      const lineup = lupR.data;
+      CONVOCADOS = new Set((appR.data || []).filter(a => a.role !== "no_convocado").map(a => a.player_id));
+      if (lineup) {
+        PIZ.formationId = lineup.formation_id;
+        PIZ.captain = lineup.captain_player_id || null;
+        const { data: ls } = await db.from("lineup_slots")
+          .select("formation_slot_id, player_id, position_code, x, y").eq("lineup_id", lineup.id);
+        for (const s of (ls || [])) {
+          PIZ.asign[s.formation_slot_id] = s.player_id;
+          if (s.position_code) PIZ.posCode[s.formation_slot_id] = s.position_code;
+          if (s.x != null && s.y != null) PIZ.pos[s.formation_slot_id] = { x: Number(s.x), y: Number(s.y) };
+        }
+      } else if (FORMACIONES.length) {
+        PIZ.formationId = FORMACIONES[0].id;
+      }
+
+      const opcionesForm = FORMACIONES.map(f =>
+        `<option value="${f.id}" ${f.id === PIZ.formationId ? "selected" : ""}>${App.esc(f.name)}</option>`).join("");
+
+      cont.innerHTML = `
+        <div class="card">
+          <div class="card-header">
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap">
+              <label class="campo mb-0" style="margin:0" for="sel-form">Formación</label>
+              <select id="sel-form" style="width:auto; min-width:120px">${opcionesForm}</select>
+            </div>
+            <div class="acciones">
+              <button class="btn pequeno" id="btn-pasadas">Alineaciones pasadas</button>
+              <button class="btn primario pequeno" id="btn-guardar-ali">Guardar alineación</button>
+            </div>
+          </div>
+
+          <div class="pizarra-cols">
+            <div class="campo-wrap"><div id="campo"></div></div>
+            <div>
+              <div id="panel-lateral">
+                <p class="muted" style="font-size:.86rem">
+                  <strong>Toca</strong> una posición para colocar el jugador y, si quieres,
+                  cambiar con qué <strong>posición</strong> se guarda esa ficha.
+                  <strong>Arrastra</strong> para moverla libremente. El aviso naranja marca
+                  a quien juega en una posición distinta a su posición natural.
+                </p>
+                <div id="resumen-ali" class="mt-2"></div>
+                <button class="btn pequeno mt-2 oculto" id="btn-reset-pos">↺ Restablecer posiciones</button>
+                <hr class="of-sep" />
+                <div id="once-banquillo"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="post-partido"></div>`;
+
+      document.getElementById("sel-form").addEventListener("change", (e) => {
+        PIZ.formationId = e.target.value;
+        PIZ.asign = {}; // al cambiar de formación las ranuras cambian: se limpia
+        PIZ.pos = {};   // y se descartan las posiciones personalizadas
+        PIZ.posCode = {};
+        pintarCampo();
+      });
+      document.getElementById("btn-reset-pos").addEventListener("click", () => {
+        PIZ.pos = {};
+        pintarCampo();
+        App.toast("Posiciones restablecidas a la formación.", "ok");
+      });
+      document.getElementById("btn-guardar-ali").onclick = guardarAlineacion;
+      document.getElementById("btn-pasadas").onclick = abrirAlineacionesPasadas;
+      pintarCampo();
+
+      // Si ya había alineación guardada, mostramos directamente el post-partido.
+      if (lineup) renderPostPartido(m);
+    }
+
+    function slotsActuales() {
+      return (SLOTS_POR_FORMACION[PIZ.formationId] || []);
+    }
+
+    // Posición efectiva de una ranura (coordenada): personalizada si se movió,
+    // o la de la formación en su defecto.
+    function efectivaPos(s) {
+      return PIZ.pos[s.id] || { x: Number(s.x), y: Number(s.y) };
+    }
+    // Código de posición efectivo de la ficha: el elegido por el técnico, o
+    // el de la ranura de formación por defecto.
+    function efectivaPosCode(s) {
+      return PIZ.posCode[s.id] || s.position_code;
+    }
+
+    // Coordenada slot (x,y 0-100) -> viewBox 0..100 x 0..150
+    function proyectar(x, y) {
+      return { cx: 8 + (x / 100) * 84, cy: 10 + (y / 100) * 130 };
+    }
+    // Inversa: viewBox -> slot (0-100), con margen de seguridad
+    function desproyectar(cx, cy) {
+      let x = (cx - 8) / 84 * 100, y = (cy - 10) / 130 * 100;
+      return { x: Math.max(3, Math.min(97, x)), y: Math.max(2, Math.min(98, y)) };
+    }
+
+    // Recorta apellidos largos para que no invadan la ficha vecina
+    function nombreCorto(txt) {
+      return txt.length > 9 ? txt.slice(0, 8) + "…" : txt;
+    }
+
+    function pintarCampo() {
+      const campo = document.getElementById("campo");
+      const slots = slotsActuales();
+      const color = (ctx.team && ctx.team.color) || "#e2231a";
+
+      const jerseys = slots.map(s => {
+        const eff = efectivaPos(s);
+        const { cx, cy } = proyectar(eff.x, eff.y);
+        const playerId = PIZ.asign[s.id];
+        const jug = PLAYERS.find(p => p.id === playerId);
+        const vacia = !jug;
+        const posCode = efectivaPosCode(s);
+        // Aviso si la posición NATURAL del jugador difiere de la elegida para la ficha
+        const aviso = jug && jug.primary_position && jug.primary_position !== posCode;
+        const num = vacia ? "+" : (jug.shirt_number ?? "");
+        // Vacía: código de la posición elegida (DC, MC, LI). Ocupada: apellido.
+        const nombre = vacia ? posCode : nombreCorto(apellido(jug.name));
+        const pillW = Math.max(nombre.length * 1.95 + 3, 7);
+        // Etiqueta de posición sobre las fichas ocupadas (pequeña, arriba)
+        const posTag = vacia ? "" :
+          `<text class="jersey-pos" x="${cx}" y="${cy - 8.2}" font-size="2.6">${App.esc(posCode)}</text>`;
+        // Brazalete de capitán (esquina superior derecha de la ficha)
+        const esCap = !vacia && PIZ.captain === playerId;
+        const capBadge = esCap ? `
+            <circle class="cap-badge" cx="${cx + 4.8}" cy="${cy - 4.8}" r="2.7"></circle>
+            <text class="cap-letter" x="${cx + 4.8}" y="${cy - 4.8}" font-size="3.2">C</text>` : "";
+        return `
+          <g class="slot ${vacia ? "vacia" : ""} ${aviso ? "aviso" : ""}" data-slot="${s.id}" tabindex="0" role="button">
+            ${posTag}
+            <circle class="jersey-shape" cx="${cx}" cy="${cy}" r="6.4" fill="${vacia ? "" : color}"
+              stroke="${vacia ? "" : "rgba(0,0,0,.35)"}" stroke-width="0.5"></circle>
+            <text class="jersey-num" x="${cx}" y="${cy}" font-size="${num === "+" ? 8 : 5.2}">${App.esc(String(num))}</text>
+            <rect class="name-pill" x="${cx - pillW / 2}" y="${cy + 8}" width="${pillW}" height="5" rx="1.4"></rect>
+            <text class="jersey-name" x="${cx}" y="${cy + 11.4}" font-size="3.5">${App.esc(nombre)}</text>
+            ${capBadge}
+          </g>`;
+      }).join("");
+
+      campo.innerHTML = `
+        <svg class="campo-svg" viewBox="0 0 100 150" xmlns="http://www.w3.org/2000/svg" aria-label="Campo de fútbol">
+          <defs>
+            <linearGradient id="cesped-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="var(--cesped-2)"/><stop offset="1" stop-color="var(--cesped)"/>
+            </linearGradient>
+          </defs>
+          <rect x="0" y="0" width="100" height="150" fill="url(#cesped-grad)"/>
+          <!-- franjas -->
+          ${[0,1,2,3,4,5].map(i => i%2===0 ? `<rect x="0" y="${i*25}" width="100" height="25" fill="rgba(255,255,255,.03)"/>` : "").join("")}
+          <g fill="none" stroke="var(--lineas)" stroke-width="0.6">
+            <rect x="4" y="5" width="92" height="140"/>
+            <line x1="4" y1="75" x2="96" y2="75"/>
+            <circle cx="50" cy="75" r="9"/>
+            <circle cx="50" cy="75" r="0.8" fill="var(--lineas)" stroke="none"/>
+            <!-- área rival (arriba) -->
+            <rect x="28" y="5" width="44" height="16"/>
+            <rect x="40" y="5" width="20" height="7"/>
+            <circle cx="50" cy="16" r="0.8" fill="var(--lineas)" stroke="none"/>
+            <path d="M 40 21 A 10 10 0 0 0 60 21"/>
+            <!-- área propia (abajo) -->
+            <rect x="28" y="129" width="44" height="16"/>
+            <rect x="40" y="138" width="20" height="7"/>
+            <circle cx="50" cy="134" r="0.8" fill="var(--lineas)" stroke="none"/>
+            <path d="M 40 129 A 10 10 0 0 1 60 129"/>
+            <!-- porterías -->
+            <rect x="45" y="3.2" width="10" height="1.8" stroke-width="0.5"/>
+            <rect x="45" y="145" width="10" height="1.8" stroke-width="0.5"/>
+          </g>
+          ${jerseys}
+        </svg>`;
+
+      // Interacción: arrastrar para mover, tocar para abrir selector
+      const svg = campo.querySelector("svg");
+      campo.querySelectorAll(".slot").forEach(g => {
+        g.addEventListener("pointerdown", (e) => onSlotPointerDown(e, g.dataset.slot, g, svg));
+        g.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); abrirSelectorJugador(g.dataset.slot); }
+        });
+      });
+
+      pintarResumen();
+      pintarOnceBanquillo();
+    }
+
+    // ---- Panel derecho: el once por líneas + el banquillo (convocados fuera del 11) ----
+    const LINEAS = [
+      { code: "portero", label: "Portero" },
+      { code: "defensa", label: "Defensa" },
+      { code: "medio",   label: "Medio" },
+      { code: "ataque",  label: "Ataque" },
+    ];
+    const posLine = (code) => (POSICIONES.find(p => p.code === code) || {}).line || "medio";
+
+    function pintarOnceBanquillo() {
+      const cont = document.getElementById("once-banquillo");
+      if (!cont) return;
+      const slots = slotsActuales();
+
+      // El once colocado, agrupado por línea de la posición elegida
+      const enOnce = [];
+      for (const s of slots) {
+        const pid = PIZ.asign[s.id];
+        if (pid) enOnce.push({ pid, code: efectivaPosCode(s) });
+      }
+      const enOnceIds = new Set(enOnce.map(e => e.pid));
+      const grupos = {};
+      for (const e of enOnce) (grupos[posLine(e.code)] ||= []).push(e);
+
+      const chip = (pid, code) => {
+        const j = jugadorPorId(pid);
+        const cap = PIZ.captain === pid ? ' <span class="of-pos" title="Capitán">C</span>' : "";
+        return `<span class="of-jug"><b>${j?.shirt_number ?? "—"}</b> ${App.esc(apellido(j?.name || ""))}${code ? ` <span class="of-pos">${App.esc(code)}</span>` : ""}${cap}</span>`;
+      };
+
+      let html = "";
+      for (const ln of LINEAS) {
+        const arr = grupos[ln.code];
+        if (!arr || !arr.length) continue;
+        arr.sort((a, b) => (jugadorPorId(a.pid)?.shirt_number ?? 999) - (jugadorPorId(b.pid)?.shirt_number ?? 999));
+        html += `<div class="of-linea"><span class="of-tit">${ln.label}</span>${arr.map(e => chip(e.pid, e.code)).join("")}</div>`;
+      }
+      if (!enOnce.length) html = '<p class="of-vacio">Coloca jugadores en el campo para ver aquí el once.</p>';
+
+      // Banquillo: convocados que no están en el 11. Si no hay convocatoria
+      // guardada, cae a todos los activos (con aviso).
+      const hayConvo = CONVOCADOS.size > 0;
+      const pool = hayConvo ? PLAYERS.filter(p => CONVOCADOS.has(p.id)) : PLAYERS;
+      const banquillo = pool.filter(p => !enOnceIds.has(p.id))
+        .sort((a, b) => (a.shirt_number ?? 999) - (b.shirt_number ?? 999));
+      const tituloBanq = hayConvo ? "Banquillo (convocados fuera del 11)" : "Suplentes posibles (sin convocatoria guardada)";
+      const banqHTML = banquillo.length
+        ? banquillo.map(p => chip(p.id, null)).join("")
+        : '<span class="of-vacio">Nadie más disponible.</span>';
+
+      cont.innerHTML = `
+        <div class="of-linea"><span class="of-tit">${enOnce.length}/11 · Once</span></div>
+        ${html}
+        <hr class="of-sep" />
+        <div class="of-linea"><span class="of-tit">${tituloBanq}</span>${banqHTML}</div>`;
+    }
+
+    // ---- Arrastre de fichas (sin librerías, con pointer events) ----
+    let drag = null;
+    function vbPoint(svg, clientX, clientY) {
+      const r = svg.getBoundingClientRect();
+      const vb = svg.viewBox.baseVal;
+      return {
+        x: vb.x + (clientX - r.left) / r.width * vb.width,
+        y: vb.y + (clientY - r.top) / r.height * vb.height,
+      };
+    }
+    function onSlotPointerDown(e, slotId, g, svg) {
+      e.preventDefault();
+      const s = slotsActuales().find(x => x.id === slotId);
+      const eff = efectivaPos(s);
+      const base = proyectar(eff.x, eff.y);
+      drag = {
+        slotId, g, svg, baseCx: base.cx, baseCy: base.cy,
+        startClientX: e.clientX, startClientY: e.clientY,
+        startVB: vbPoint(svg, e.clientX, e.clientY), moved: false,
+      };
+      try { g.setPointerCapture(e.pointerId); } catch (_) {}
+      document.addEventListener("pointermove", onDragMove);
+      document.addEventListener("pointerup", onDragUp);
+    }
+    function onDragMove(e) {
+      if (!drag) return;
+      if (Math.hypot(e.clientX - drag.startClientX, e.clientY - drag.startClientY) > 6) drag.moved = true;
+      if (!drag.moved) return;
+      const cur = vbPoint(drag.svg, e.clientX, e.clientY);
+      drag.g.setAttribute("transform", `translate(${cur.x - drag.startVB.x} ${cur.y - drag.startVB.y})`);
+    }
+    function onDragUp(e) {
+      document.removeEventListener("pointermove", onDragMove);
+      document.removeEventListener("pointerup", onDragUp);
+      const d = drag; drag = null;
+      if (!d) return;
+      if (!d.moved) { abrirSelectorJugador(d.slotId); return; }
+      const cur = vbPoint(d.svg, e.clientX, e.clientY);
+      const nueva = desproyectar(d.baseCx + (cur.x - d.startVB.x), d.baseCy + (cur.y - d.startVB.y));
+      PIZ.pos[d.slotId] = nueva;
+      pintarCampo();
+    }
+
+    function pintarResumen() {
+      const slots = slotsActuales();
+      const puestos = slots.filter(s => PIZ.asign[s.id]).length;
+      const cont = document.getElementById("resumen-ali");
+      if (!cont) return;
+      const avisos = slots.filter(s => {
+        const j = PLAYERS.find(p => p.id === PIZ.asign[s.id]);
+        return j && j.primary_position && j.primary_position !== efectivaPosCode(s);
+      }).length;
+      cont.innerHTML = `
+        <div class="badge ${puestos === 11 ? "ok" : ""}">${puestos}/11 colocados</div>
+        ${avisos ? `<div class="badge warn" style="margin-left:6px">${avisos} fuera de su posición</div>` : ""}`;
+      const btnReset = document.getElementById("btn-reset-pos");
+      if (btnReset) btnReset.classList.toggle("oculto", Object.keys(PIZ.pos).length === 0);
+    }
+
+    // ---- Selector de jugador + posición de la ficha ----
+    function abrirSelectorJugador(slotId) {
+      const slot = slotsActuales().find(s => s.id === slotId);
+      const ocupante = PIZ.asign[slotId];
+      const posActual = efectivaPosCode(slot);
+
+      const render = (filtro = "") => {
+        const q = filtro.trim().toLowerCase();
+        const items = PLAYERS.filter(p => !q || p.name.toLowerCase().includes(q) ||
+            String(p.shirt_number || "").includes(q)).map(p => {
+          const enOtra = Object.entries(PIZ.asign).find(([sid, pid]) => pid === p.id);
+          const alineado = !!enOtra;
+          const natural = p.primary_position;
+          const distinto = natural && natural !== posActual;
+          return `
+            <div class="jug-item ${alineado ? "alineado" : ""}" data-pid="${p.id}">
+              <span class="badge dorsal">${p.shirt_number ?? "—"}</span>
+              <div class="info">
+                <div class="nom">${App.esc(p.name)}</div>
+                <div class="sub">${App.esc(posLabel(natural) || "Sin posición")}${alineado ? " · ya alineado" : ""}${distinto ? " · ⚠ distinta a esta ficha" : ""}</div>
+              </div>
+            </div>`;
+        }).join("");
+        return items || '<p class="muted centro" style="padding:16px">Ningún jugador coincide.</p>';
+      };
+
+      const opcionesPos = POSICIONES.map(p =>
+        `<option value="${p.code}" ${p.code === posActual ? "selected" : ""}>${p.code} · ${App.esc(p.label)}</option>`).join("");
+
+      App.modal({
+        titulo: `Ficha ${slot.slot_code}`,
+        contenido: `
+          <label class="campo" for="sel-posficha">Posición con la que se guarda esta ficha</label>
+          <select id="sel-posficha">${opcionesPos}</select>
+          <p class="muted" style="font-size:.78rem; margin:.4rem 0 0">
+            Cambia esto si moviste la ficha y ahora ocupa otra demarcación
+            (p. ej. un MC que juega de MCO). Es la posición que contará en los
+            minutos por posición.
+          </p>
+          <hr style="border:none; border-top:1px solid var(--border); margin:14px 0" />
+          <label class="campo" for="buscar-jug">Jugador</label>
+          <input id="buscar-jug" type="search" placeholder="Buscar por nombre o dorsal…" />
+          ${ocupante ? `
+            <label style="display:flex; align-items:center; gap:8px; margin-top:12px; font-weight:600; cursor:pointer">
+              <input type="checkbox" id="chk-cap" style="width:auto" ${PIZ.captain === ocupante ? "checked" : ""} />
+              Este jugador es el capitán (C)
+            </label>
+            <button class="btn peligro pequeno mt-2" id="btn-quitar">Quitar jugador de esta ficha</button>` : ""}
+          <div class="lista-jug mt-2" id="lista-jug">${render()}</div>`,
+        onMontar(cuerpo, cerrar) {
+          const lista = cuerpo.querySelector("#lista-jug");
+          // Cambio de posición de la ficha (se aplica al instante)
+          cuerpo.querySelector("#sel-posficha").addEventListener("change", (e) => {
+            const code = e.target.value;
+            if (code === slot.position_code) delete PIZ.posCode[slotId];
+            else PIZ.posCode[slotId] = code;
+            pintarCampo();
+          });
+          cuerpo.querySelector("#buscar-jug").addEventListener("input", (e) => {
+            lista.innerHTML = render(e.target.value);
+            enlazar();
+          });
+          // Casilla de capitán (solo un capitán por alineación)
+          const chkCap = cuerpo.querySelector("#chk-cap");
+          if (chkCap) chkCap.addEventListener("change", () => {
+            if (chkCap.checked) PIZ.captain = ocupante;
+            else if (PIZ.captain === ocupante) PIZ.captain = null;
+            pintarCampo();
+          });
+          const btnQuitar = cuerpo.querySelector("#btn-quitar");
+          if (btnQuitar) btnQuitar.addEventListener("click", () => {
+            if (PIZ.captain === ocupante) PIZ.captain = null;
+            delete PIZ.asign[slotId]; cerrar(); pintarCampo();
+          });
+          function enlazar() {
+            lista.querySelectorAll(".jug-item").forEach(it => {
+              it.addEventListener("click", () => {
+                colocarJugador(slotId, it.dataset.pid);
+                cerrar(); pintarCampo();
+              });
+            });
+          }
+          enlazar();
+        }
+      });
+    }
+
+    // Coloca un jugador en una ranura; si ya estaba en otra, intercambia
+    // (arrastrando también la posición elegida de cada ficha).
+    function colocarJugador(slotId, playerId) {
+      const slotPrevio = Object.keys(PIZ.asign).find(sid => PIZ.asign[sid] === playerId);
+      if (slotPrevio && slotPrevio !== slotId) {
+        const ocupante = PIZ.asign[slotId];
+        if (ocupante) PIZ.asign[slotPrevio] = ocupante;
+        else delete PIZ.asign[slotPrevio];
+      }
+      PIZ.asign[slotId] = playerId;
+    }
+
+    // ---- Guardar alineación ----
+    async function guardarAlineacion() {
+      const slots = slotsActuales();
+      const entradas = Object.entries(PIZ.asign).filter(([sid, pid]) => pid);
+      if (entradas.length === 0) { App.toast("Coloca al menos un jugador.", "warn"); return; }
+
+      const btn = document.getElementById("btn-guardar-ali");
+      btn.disabled = true; btn.textContent = "Guardando…";
+
+      // El capitán solo vale si está entre los colocados; si no, se descarta.
+      const colocados = new Set(entradas.map(([sid, pid]) => pid));
+      const captain = PIZ.captain && colocados.has(PIZ.captain) ? PIZ.captain : null;
+
+      // upsert lineup (unique por match_id)
+      const { data: lineup, error: e1 } = await db.from("lineups")
+        .upsert({ match_id: PIZ.match.id, formation_id: PIZ.formationId, captain_player_id: captain }, { onConflict: "match_id" })
+        .select("id").single();
+      if (e1) { App.toast("Error al guardar la alineación.", "error"); console.error(e1); btn.disabled = false; btn.textContent = "Guardar alineación"; return; }
+
+      // reemplazar ranuras: borrar e insertar (guardando la posición efectiva
+      // de cada ficha y su código de posición elegido)
+      await db.from("lineup_slots").delete().eq("lineup_id", lineup.id);
+      const filas = entradas.map(([sid, pid]) => {
+        const s = slots.find(x => x.id === sid);
+        const eff = s ? efectivaPos(s) : null;
+        return {
+          lineup_id: lineup.id, formation_slot_id: sid, player_id: pid,
+          position_code: s ? efectivaPosCode(s) : null,
+          x: eff ? Math.round(eff.x * 10) / 10 : null,
+          y: eff ? Math.round(eff.y * 10) / 10 : null,
+        };
+      });
+      const { error: e2 } = await db.from("lineup_slots").insert(filas);
+
+      btn.disabled = false; btn.textContent = "Guardar alineación";
+      if (e2) { App.toast("Error al guardar las posiciones.", "error"); console.error(e2); return; }
+      App.toast("Alineación guardada. Cierra los minutos abajo.", "ok");
+      // Cargar el post-partido justo debajo (sin cambiar de pestaña)
+      renderPostPartido(PIZ.match);
+      document.getElementById("post-partido").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    // ===================================================================
+    //  ALINEACIONES PASADAS
+    // ===================================================================
+    async function abrirAlineacionesPasadas() {
+      const m = App.modal({ titulo: "Alineaciones pasadas", contenido: '<div class="cargando">Cargando</div>' });
+
+      const { data: lineups } = await db
+        .from("lineups")
+        .select("id, formation_id, matches!inner(id, opponent, match_date, venue, goals_for, goals_against, status, team_id)")
+        .eq("matches.team_id", App.teamId());
+
+      const otras = (lineups || [])
+        .filter(l => l.matches.id !== PIZ.match.id)
+        .sort((a, b) => b.matches.match_date.localeCompare(a.matches.match_date));
+
+      if (!otras.length) {
+        m.cuerpo.innerHTML = '<p class="muted centro" style="padding:20px">Todavía no hay otras alineaciones guardadas.</p>';
+        return;
+      }
+
+      m.cuerpo.innerHTML = `
+        <p class="muted" style="font-size:.84rem; margin-top:0">
+          Toca un partido para abrir su alineación (verla o editarla), o usa
+          <strong>Duplicar aquí</strong> para copiarla al partido actual.
+        </p>` + otras.map(l => {
+        const mm = l.matches;
+        const fname = (FORMACIONES.find(f => f.id === l.formation_id) || {}).name || "";
+        const res = mm.status === "jugado" && mm.goals_for != null ? `${mm.goals_for}-${mm.goals_against}` : "—";
+        return `
+          <div class="jug-item" data-goto="${mm.id}" style="border:1px solid var(--border); margin-bottom:8px">
+            <div class="info">
+              <div class="nom">${App.esc(mm.opponent)} <span class="badge">${fname}</span></div>
+              <div class="sub">${App.fechaBonita(mm.match_date)} · ${mm.venue} · ${res}</div>
+            </div>
+            <button class="btn pequeno" data-dup="${l.id}" data-form="${l.formation_id}">Duplicar aquí</button>
+          </div>`;
+      }).join("");
+
+      m.cuerpo.querySelectorAll("[data-goto]").forEach(el => {
+        el.addEventListener("click", (e) => {
+          if (e.target.closest("[data-dup]")) return;
+          m.cerrar(); irA(el.dataset.goto);
+        });
+      });
+      m.cuerpo.querySelectorAll("[data-dup]").forEach(btn => {
+        btn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          await duplicarAlineacion(btn.dataset.dup, btn.dataset.form);
+          m.cerrar();
+        });
+      });
+    }
+
+    // Copia el once de otra alineación (formación, jugadores, posiciones
+    // elegidas y coordenadas) a la pizarra del partido actual.
+    async function duplicarAlineacion(lineupId, formationId) {
+      const [{ data: ls }, { data: lup }] = await Promise.all([
+        db.from("lineup_slots").select("formation_slot_id, player_id, position_code, x, y").eq("lineup_id", lineupId),
+        db.from("lineups").select("captain_player_id").eq("id", lineupId).maybeSingle(),
+      ]);
+      PIZ.formationId = formationId;
+      PIZ.asign = {}; PIZ.pos = {}; PIZ.posCode = {}; PIZ.captain = (lup && lup.captain_player_id) || null;
+      for (const s of (ls || [])) {
+        PIZ.asign[s.formation_slot_id] = s.player_id;
+        if (s.position_code) PIZ.posCode[s.formation_slot_id] = s.position_code;
+        if (s.x != null && s.y != null) PIZ.pos[s.formation_slot_id] = { x: Number(s.x), y: Number(s.y) };
+      }
+      const sel = document.getElementById("sel-form");
+      if (sel) sel.value = formationId;
+      pintarCampo();
+      App.toast("Alineación duplicada. Recuerda pulsar Guardar.", "ok");
+    }
+
+    // ===================================================================
+    //  POST-PARTIDO (inline bajo la pizarra)
+    //  Funde el antiguo "Cierre" (minutos y posiciones) con los "Eventos"
+    //  (goles, asistencias, tarjetas) en un solo bloque, tal y como se
+    //  rellena de verdad: todo junto una vez jugado el partido.
+    //
+    //  Minutos: se derivan de "Entró/Salió". Si un jugador fue expulsado,
+    //  basta con poner el minuto en "Salió" y sus minutos (y los de su
+    //  posición) se ajustan solos — así el caso "expulsado en el 66" cuadra.
+    // ===================================================================
+    let CIERRE = {};   // playerId -> {appId, role, minutes, entered, exited, positions:[{code,minutes}]}
+    let POSJUG = {};   // playerId -> position_code de su ficha en el once (para precargas)
+
+    async function renderPostPartido(m) {
+      const cont = document.getElementById("post-partido");
+      if (!cont) return;
+      cont.innerHTML = '<div class="card"><div class="cargando">Cargando post-partido</div></div>';
+
+      const [appR, apR, lupR] = await Promise.all([
+        db.from("appearances").select("id, player_id, role, minutes_played, entered_minute, exited_minute").eq("match_id", m.id),
+        db.from("appearance_positions").select("appearance_id, position_code, minutes"),
+        db.from("lineups").select("id, formation_id, lineup_slots(player_id, formation_slot_id, position_code)").eq("match_id", m.id).maybeSingle(),
+      ]);
+      const apps = (appR.data || []).filter(a => a.role !== "no_convocado");
+
+      if (apps.length === 0) {
+        cont.innerHTML = `
+          <div class="card">
+            <h2>Después del partido</h2>
+            <p class="muted" style="margin-bottom:0">
+              Guarda primero la <strong>convocatoria</strong> (paso 1). Aquí cerrarás
+              los minutos, las posiciones y los eventos de los convocados.
+            </p>
+          </div>`;
+        return;
+      }
+
+      // Posición de cada titular según su ficha del once (position_code elegido,
+      // o el de la ranura de formación por defecto).
+      POSJUG = {};
+      const lup = lupR.data;
+      if (lup) {
+        const fslots = SLOTS_POR_FORMACION[lup.formation_id] || [];
+        for (const s of (lup.lineup_slots || [])) {
+          const fs = fslots.find(x => x.id === s.formation_slot_id);
+          POSJUG[s.player_id] = s.position_code || (fs && fs.position_code) || null;
+        }
+      }
+      const enOnce = new Set(Object.keys(POSJUG));
+
+      // Posiciones ya guardadas por appearance
+      const posByApp = {};
+      for (const r of (apR.data || [])) (posByApp[r.appearance_id] ||= []).push({ code: r.position_code, minutes: r.minutes });
+
+      // Construir estado
+      CIERRE = {};
+      for (const a of apps) {
+        const guardadas = posByApp[a.id] || [];
+        const jug = jugadorPorId(a.player_id);
+        let minutes = a.minutes_played || 0, entered = a.entered_minute, exited = a.exited_minute, positions = guardadas;
+        let role = a.role;
+        // Precarga si no hay nada cerrado aún: los del once arrancan de titulares
+        // con 90' en su posición; el resto, suplentes sin jugar.
+        if (guardadas.length === 0 && (a.minutes_played || 0) === 0) {
+          if (enOnce.has(a.player_id)) {
+            const pc = POSJUG[a.player_id] || (jug && jug.primary_position) || null;
+            role = "titular";
+            minutes = DURACION_PARTIDO;
+            positions = pc ? [{ code: pc, minutes: DURACION_PARTIDO }] : [];
+            entered = null; exited = null;
+          }
+        }
+        CIERRE[a.player_id] = { appId: a.id, role, minutes, entered, exited, positions };
+      }
+
+      pintarPostPartido(m);
+    }
+
+    // Deriva minutos a partir de entró/salió (y sincroniza si hay una sola
+    // posición). Un titular sin salir juega los 90'; un expulsado que "sale"
+    // en el 66 pasa a 66' automáticamente.
+    function recomputarMinutos(c) {
+      if (c.exited != null) c.minutes = Math.max(0, c.exited - (c.entered || 0));
+      else if (c.entered != null) c.minutes = Math.max(0, DURACION_PARTIDO - c.entered);
+      if (c.positions.length === 1) c.positions[0].minutes = c.minutes;
+      // Un suplente con minutos pasa a "jugó"; sin minutos, "no jugó" (para
+      // que las estadísticas de partidos jugados cuadren aunque se editen a mano).
+      if (c.role !== "titular") c.role = Number(c.minutes) > 0 ? "suplente_jugo" : "suplente_no_jugo";
+    }
+
+    function pintarPostPartido(m) {
+      const cont = document.getElementById("post-partido");
+      const opcionesPos = POSICIONES.map(p => `<option value="${p.code}">${p.code} · ${App.esc(p.label)}</option>`).join("");
+
+      const ordenados = Object.keys(CIERRE).sort((a, b) => {
+        const ra = CIERRE[a].role === "titular" ? 0 : 1, rb = CIERRE[b].role === "titular" ? 0 : 1;
+        if (ra !== rb) return ra - rb;
+        return (jugadorPorId(a)?.shirt_number ?? 999) - (jugadorPorId(b)?.shirt_number ?? 999);
+      });
+
+      function tarjeta(pid) {
+        const c = CIERRE[pid];
+        const jug = jugadorPorId(pid);
+        const suma = c.positions.reduce((t, x) => t + (Number(x.minutes) || 0), 0);
+        const descuadre = suma !== (Number(c.minutes) || 0);
+        const rolTxt = { titular: "Titular", suplente_jugo: "Suplente (jugó)", suplente_no_jugo: "Suplente" }[c.role] || c.role;
+        const esTitular = c.role === "titular";
+        const filasPos = c.positions.map((x, i) => `
+          <div class="pp-pos-row" data-pos="${pid}:${i}">
+            <select data-poscode="${pid}:${i}">${opcionesPos}</select>
+            <input type="number" min="1" max="130" value="${x.minutes}" data-posmin="${pid}:${i}" placeholder="min" />
+            <button class="btn pequeno peligro" data-posdel="${pid}:${i}">✕</button>
+          </div>`).join("");
+        // Un titular entró en el minuto 0: no tiene sentido pedir "Entró".
+        // Solo "Salió" (cambio o expulsión). Los suplentes sí muestran ambos.
+        const camposMin = esTitular
+          ? `<div class="campo-min"><label>Salió (min)</label>
+               <input type="number" min="0" max="130" value="${c.exited ?? ""}" data-exi="${pid}" placeholder="jugó los 90" /></div>`
+          : `<div class="campo-min"><label>Entró (min)</label>
+               <input type="number" min="0" max="130" value="${c.entered ?? ""}" data-ent="${pid}" placeholder="—" /></div>
+             <div class="campo-min"><label>Salió (min)</label>
+               <input type="number" min="0" max="130" value="${c.exited ?? ""}" data-exi="${pid}" placeholder="—" /></div>`;
+        return `
+          <div class="pp-card" data-cierre="${pid}">
+            <div class="pp-top">
+              <span class="badge dorsal">${jug?.shirt_number ?? "—"}</span>
+              <div class="pp-nom">${App.esc(jug?.name || "")}<div class="pp-rol">${rolTxt}</div></div>
+              <div class="pp-min"><label>Min</label>
+                <input type="number" min="0" max="130" value="${c.minutes}" data-min="${pid}" /></div>
+              <button class="btn pequeno" data-posadd="${pid}">+ Posición</button>
+            </div>
+            <div class="pp-sub">${camposMin}</div>
+            <div data-posbox="${pid}">${filasPos}</div>
+            ${c.positions.length ? `<div class="badge ${descuadre ? "warn" : "ok"}" style="margin-top:6px">Σ ${suma}′ / ${c.minutes}′ ${descuadre ? "· no cuadra" : "· ok"}</div>` : ""}
+          </div>`;
+      }
+
+      cont.innerHTML = `
+        <div class="card">
+          <div class="card-header">
+            <h2>Después del partido</h2>
+            <div class="acciones">
+              <button class="btn pequeno" id="btn-cambio">⇄ Registrar cambio</button>
+              <button class="btn primario pequeno" id="btn-guardar-cierre">Guardar minutos</button>
+            </div>
+          </div>
+          <p class="muted" style="font-size:.8rem; margin-top:0">
+            Titulares con ${DURACION_PARTIDO}′ por defecto. Corrige excepciones, usa “Registrar cambio” para
+            sustituciones o pon el minuto en <strong>“Salió”</strong> si fue expulsado (los minutos se ajustan solos).
+            Goles y tarjetas van en la pestaña <strong>Eventos</strong>.
+          </p>
+          <div id="lista-cierre">${ordenados.map(tarjeta).join("")}</div>
+        </div>`;
+
+      // Preseleccionar códigos de posición
+      for (const pid of ordenados) {
+        CIERRE[pid].positions.forEach((x, i) => {
+          const sel = cont.querySelector(`[data-poscode="${pid}:${i}"]`);
+          if (sel) sel.value = x.code;
+        });
+      }
+
+      // Listeners de minutos / posiciones
+      const repintar = () => pintarPostPartido(m);
+      cont.querySelectorAll("[data-min]").forEach(el => el.addEventListener("change", () => {
+        const c = CIERRE[el.dataset.min];
+        c.minutes = Number(el.value) || 0;
+        if (c.positions.length === 1) c.positions[0].minutes = c.minutes;
+        if (c.role !== "titular") c.role = c.minutes > 0 ? "suplente_jugo" : "suplente_no_jugo";
+        repintar();
+      }));
+      cont.querySelectorAll("[data-ent]").forEach(el => el.addEventListener("change", () => {
+        const c = CIERRE[el.dataset.ent];
+        c.entered = el.value === "" ? null : Number(el.value);
+        recomputarMinutos(c); repintar();
+      }));
+      cont.querySelectorAll("[data-exi]").forEach(el => el.addEventListener("change", () => {
+        const c = CIERRE[el.dataset.exi];
+        c.exited = el.value === "" ? null : Number(el.value);
+        recomputarMinutos(c); repintar();
+      }));
+      cont.querySelectorAll("[data-poscode]").forEach(el => el.addEventListener("change", () => {
+        const [pid, i] = el.dataset.poscode.split(":"); CIERRE[pid].positions[i].code = el.value;
+      }));
+      cont.querySelectorAll("[data-posmin]").forEach(el => el.addEventListener("change", () => {
+        const [pid, i] = el.dataset.posmin.split(":"); CIERRE[pid].positions[i].minutes = Number(el.value) || 0; repintar();
+      }));
+      cont.querySelectorAll("[data-posdel]").forEach(el => el.addEventListener("click", () => {
+        const [pid, i] = el.dataset.posdel.split(":"); CIERRE[pid].positions.splice(Number(i), 1); repintar();
+      }));
+      cont.querySelectorAll("[data-posadd]").forEach(el => el.addEventListener("click", () => {
+        const pid = el.dataset.posadd; const jug = jugadorPorId(pid);
+        CIERRE[pid].positions.push({ code: POSJUG[pid] || jug?.primary_position || POSICIONES[0].code, minutes: 0 }); repintar();
+      }));
+
+      document.getElementById("btn-cambio").addEventListener("click", () => registrarCambio(m));
+      document.getElementById("btn-guardar-cierre").addEventListener("click", () => guardarCierre(m));
+    }
+
+    // Sustitución: ajusta de golpe al que sale y al que entra
+    function registrarCambio(m) {
+      const enCampo = Object.keys(CIERRE).filter(pid => {
+        const c = CIERRE[pid];
+        return (c.role === "titular" || c.role === "suplente_jugo") && c.exited == null && c.minutes > 0;
+      });
+      const enBanquillo = Object.keys(CIERRE).filter(pid => {
+        const c = CIERRE[pid];
+        return c.role === "suplente_no_jugo" || (c.minutes === 0 && c.entered == null);
+      });
+      if (!enCampo.length || !enBanquillo.length) {
+        App.toast("Necesitas jugadores en campo y en el banquillo para un cambio.", "warn"); return;
+      }
+      const opt = (pid) => { const j = jugadorPorId(pid); return `<option value="${pid}">${j?.shirt_number ?? "—"} · ${App.esc(j?.name || "")}</option>`; };
+      App.modal({
+        titulo: "Registrar cambio",
+        contenido: `
+          <label class="campo" for="c-sale">Sale</label>
+          <select id="c-sale">${enCampo.map(opt).join("")}</select>
+          <label class="campo" for="c-entra">Entra</label>
+          <select id="c-entra">${enBanquillo.map(opt).join("")}</select>
+          <label class="campo" for="c-min">Minuto del cambio</label>
+          <input id="c-min" type="number" min="1" max="130" value="70" />
+          <div class="acciones mt-3"><button class="btn primario" id="c-ok">Aplicar cambio</button></div>`,
+        onMontar(cuerpo, cerrar) {
+          cuerpo.querySelector("#c-ok").addEventListener("click", () => {
+            const salePid = cuerpo.querySelector("#c-sale").value;
+            const entraPid = cuerpo.querySelector("#c-entra").value;
+            const min = Number(cuerpo.querySelector("#c-min").value) || 0;
+            const S = CIERRE[salePid], E = CIERRE[entraPid];
+            // El que sale
+            S.exited = min;
+            S.minutes = Math.max(0, min - (S.entered || 0));
+            if (S.positions.length === 1) S.positions[0].minutes = S.minutes;
+            // El que entra hereda la posición del que sale
+            const posHeredada = (S.positions[0] && S.positions[0].code) || POSJUG[salePid] || jugadorPorId(entraPid)?.primary_position || POSICIONES[0].code;
+            E.entered = min;
+            E.minutes = Math.max(0, DURACION_PARTIDO - min);
+            E.role = "suplente_jugo";
+            E.positions = [{ code: posHeredada, minutes: E.minutes }];
+            cerrar();
+            pintarPostPartido(m);
+            App.toast("Cambio registrado.", "ok");
+          });
+        }
+      });
+    }
+
+    async function guardarCierre(m) {
+      const btn = document.getElementById("btn-guardar-cierre");
+      btn.disabled = true; btn.textContent = "Guardando…";
+
+      // Actualizar cada appearance y reemplazar sus posiciones
+      for (const pid of Object.keys(CIERRE)) {
+        const c = CIERRE[pid];
+        await db.from("appearances").update({
+          role: c.role,
+          minutes_played: Number(c.minutes) || 0,
+          entered_minute: c.entered ?? null,
+          exited_minute: c.exited ?? null,
+        }).eq("id", c.appId);
+
+        await db.from("appearance_positions").delete().eq("appearance_id", c.appId);
+        const filasPos = c.positions.filter(x => x.code && Number(x.minutes) > 0)
+          .map(x => ({ appearance_id: c.appId, position_code: x.code, minutes: Number(x.minutes) }));
+        if (filasPos.length) await db.from("appearance_positions").insert(filasPos);
+      }
+
+      // Marcar el partido como jugado si aún no lo estaba
+      if (m.status !== "jugado") {
+        await db.from("matches").update({ status: "jugado" }).eq("id", m.id);
+        m.status = "jugado";
+      }
+
+      btn.disabled = false; btn.textContent = "Guardar minutos";
+      App.toast("Minutos guardados.", "ok");
+    }
+
+    // ===================================================================
+    //  EVENTOS (goles, asistencias, tarjetas) — pestaña propia (paso 3)
+    // ===================================================================
+    const TIPOS_EVENTO = [
+      { code: "gol",            label: "Gol",             emoji: "⚽" },
+      { code: "asistencia",     label: "Asistencia",      emoji: "🅰️" },
+      { code: "amarilla",       label: "Amarilla",        emoji: "🟨" },
+      { code: "doble_amarilla", label: "Doble amarilla",  emoji: "🟨🟥" },
+      { code: "roja",           label: "Roja directa",    emoji: "🟥" },
+      { code: "gol_en_propia",  label: "Gol en propia",   emoji: "🥅" },
+      { code: "penalti_parado", label: "Penalti parado",  emoji: "🧤" },
+    ];
+    const tipoEvento = (c) => TIPOS_EVENTO.find(t => t.code === c) || { label: c, emoji: "•" };
+
+    async function renderEventos(m) {
+      const cont = document.getElementById("sub-contenido");
+      cont.innerHTML = '<div class="cargando">Cargando eventos</div>';
+      const { data: eventos } = await db.from("match_events")
+        .select("id, player_id, type, minute, notes").eq("match_id", m.id)
+        .order("minute", { ascending: true, nullsFirst: true });
+
+      const lista = (eventos || []).map(e => {
+        const t = tipoEvento(e.type), jug = jugadorPorId(e.player_id);
+        return `
+          <div class="jug-item" style="border:1px solid var(--border); margin-bottom:6px">
+            <span style="font-size:1.1rem">${t.emoji}</span>
+            <div class="info">
+              <div class="nom">${App.esc(jug?.name || "—")} <span class="muted" style="font-weight:400">· ${t.label}</span></div>
+              <div class="sub">${e.minute != null ? "min " + e.minute : "sin minuto"}${e.notes ? " · " + App.esc(e.notes) : ""}</div>
+            </div>
+            <button class="btn pequeno peligro" data-del-ev="${e.id}">✕</button>
+          </div>`;
+      }).join("");
+
+      cont.innerHTML = `
+        <div class="card">
+          <div class="card-header">
+            <h2>Eventos del partido</h2>
+            <button class="btn primario pequeno" id="btn-add-ev">+ Evento</button>
+          </div>
+          <p class="muted" style="font-size:.82rem; margin-top:0">
+            Goles, asistencias y tarjetas. Alimentan el máximo goleador, las asistencias
+            y el aviso del ciclo de amarillas.
+          </p>
+          <div id="lista-ev">${lista || '<p class="muted centro" style="padding:16px">Aún no hay eventos registrados.</p>'}</div>
+        </div>`;
+
+      document.getElementById("btn-add-ev").addEventListener("click", () => formEvento(m));
+      cont.querySelectorAll("[data-del-ev]").forEach(b => b.addEventListener("click", async () => {
+        const ok = await App.confirmar({ titulo: "Eliminar evento", mensaje: "Se quitará este evento.", textoOk: "Eliminar", peligro: true });
+        if (!ok) return;
+        const { error } = await db.from("match_events").delete().eq("id", b.dataset.delEv);
+        if (error) { App.toast("No se pudo eliminar.", "error"); return; }
+        App.toast("Evento eliminado.", "ok"); renderEventos(m);
+      }));
+    }
+
+    function formEvento(m) {
+      const opcTipo = TIPOS_EVENTO.map(t => `<option value="${t.code}">${t.emoji} ${t.label}</option>`).join("");
+      // Prioriza los convocados en el desplegable
+      const convocados = Object.keys(CIERRE);
+      const ordenJug = [...PLAYERS].sort((a, b) => {
+        const ca = convocados.includes(a.id) ? 0 : 1, cb = convocados.includes(b.id) ? 0 : 1;
+        return ca - cb || (a.shirt_number ?? 999) - (b.shirt_number ?? 999);
+      });
+      const opcJug = ordenJug.map(p => `<option value="${p.id}">${p.shirt_number ?? "—"} · ${App.esc(p.name)}${convocados.includes(p.id) ? "" : " (no convocado)"}</option>`).join("");
+      App.modal({
+        titulo: "Nuevo evento",
+        contenido: `
+          <label class="campo" for="e-tipo">Tipo</label>
+          <select id="e-tipo">${opcTipo}</select>
+          <label class="campo" for="e-jug">Jugador</label>
+          <select id="e-jug">${opcJug}</select>
+          <label class="campo" for="e-min">Minuto</label>
+          <input id="e-min" type="number" min="0" max="130" placeholder="—" />
+          <p class="muted" style="font-size:.78rem; margin:.4rem 0 0">
+            En expulsiones (roja o doble amarilla), recuerda poner el minuto también
+            en “Salió” arriba para que los minutos cuadren.
+          </p>
+          <label class="campo" for="e-notas">Nota (opcional)</label>
+          <input id="e-notas" type="text" />
+          <div class="acciones mt-3"><button class="btn primario" id="e-guardar">Guardar evento</button></div>`,
+        onMontar(cuerpo, cerrar) {
+          cuerpo.querySelector("#e-guardar").addEventListener("click", async () => {
+            const min = cuerpo.querySelector("#e-min").value;
+            const { error } = await db.from("match_events").insert({
+              match_id: m.id, player_id: cuerpo.querySelector("#e-jug").value,
+              type: cuerpo.querySelector("#e-tipo").value,
+              minute: min === "" ? null : Number(min),
+              notes: cuerpo.querySelector("#e-notas").value.trim() || null,
+            });
+            if (error) { App.toast("No se pudo guardar el evento.", "error"); console.error(error); return; }
+            cerrar(); App.toast("Evento añadido.", "ok"); renderEventos(m);
+          });
+        }
+      });
+    }
+
+    // ---- Arranque ----
+    router();
+  });
+  </script>
+</body>
+</html>

@@ -1,0 +1,464 @@
+/* =====================================================================
+   APP GESTIÓN FÚTBOL — styles.css
+   Identidad visual unificada, calcada de la app de sRPE (UD Icodense):
+   navy #0a1728 + rojo #e2231a, tema oscuro único, cabecera con borde rojo.
+   Todo por custom properties: nada de valores hardcodeados repetidos.
+   Añade sobre la base de RPE lo que esta app necesita: pestañas de
+   navegación, tablas de datos, campo de fútbol, badges, modal y toast.
+   ===================================================================== */
+
+:root {
+  /* ---- Paleta (de la app RPE) ---- */
+  --bg:          #0a1728;
+  --bg-2:        #0d1f38;
+  --card:        #102844;
+  --card-2:      #17355c;
+  --text:        #f3f7fd;
+  --muted:       #90a6c6;
+  --accent:      #e2231a;
+  --accent-2:    #ff4438;
+  --accent-press:#b81913;
+  --border:      #244269;
+
+  /* ---- Estados ---- */
+  --good:        #37c47a;
+  --good-soft:   rgba(55,196,122,.14);
+  --warn:        #f2b84b;
+  --warn-soft:   rgba(242,184,75,.14);
+  --danger:      #ff8a80;
+  --danger-soft: rgba(255,138,128,.14);
+  --info:        #4d9fff;
+  --info-soft:   rgba(77,159,255,.14);
+
+  /* ---- Campo de fútbol ---- */
+  --cesped:      #17492e;
+  --cesped-2:    #1b5636;
+  --lineas:      rgba(255,255,255,.55);
+
+  /* ---- Formas ---- */
+  --radio:       12px;
+  --radio-sm:    9px;
+  --radio-lg:    16px;
+  --shadow:      rgba(226,35,26,0.35);
+  --shadow-card: 0 8px 24px rgba(0,0,0,.32);
+
+  /* ---- Espaciado ---- */
+  --sp-1: 6px;
+  --sp-2: 10px;
+  --sp-3: 16px;
+  --sp-4: 22px;
+  --sp-5: 32px;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; }
+
+body {
+  background:
+    radial-gradient(120% 50% at 100% 0%, rgba(226,35,26,0.14), transparent 55%),
+    var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.4;
+  min-height: 100vh;
+  min-height: 100dvh;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Contenedor general de las páginas privadas */
+.wrap {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 18px 16px 96px;
+}
+
+h1 { font-size: 1.4rem; margin: 0; }
+h2 { font-size: 1.12rem; margin: 0 0 var(--sp-2); font-weight: 800; }
+h3 { font-size: .98rem; margin: 0 0 var(--sp-1); font-weight: 700; }
+a { color: var(--accent); }
+.muted { color: var(--muted); }
+.oculto { display: none !important; }
+.centro { text-align: center; }
+.nowrap { white-space: nowrap; }
+
+a:focus-visible, button:focus-visible, input:focus-visible,
+select:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* =====================================================================
+   CABECERA (marca + club + salir)
+   ===================================================================== */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  margin-bottom: 6px;
+  border-bottom: 3px solid var(--accent);
+}
+.marca { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.escudo {
+  flex: 0 0 auto;
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,.06);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 5px;
+}
+.escudo img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.marca h1 {
+  text-transform: uppercase;
+  font-style: italic;
+  font-weight: 800;
+  letter-spacing: .5px;
+  font-size: 1.2rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.subtitulo-club {
+  margin: 2px 0 0;
+  font-size: .76rem;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* =====================================================================
+   PESTAÑAS DE NAVEGACIÓN (Inicio · Equipo · Partidos · Entrenamientos)
+   Barra fija abajo en móvil, en línea bajo la cabecera en escritorio.
+   ===================================================================== */
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin: 14px 0 22px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radio);
+  padding: 4px;
+}
+.tabs a {
+  flex: 1 1 0;
+  text-align: center;
+  padding: 10px 6px;
+  border-radius: var(--radio-sm);
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 700;
+  font-size: .86rem;
+  white-space: nowrap;
+}
+.tabs a.activa {
+  background: linear-gradient(120deg, var(--accent), var(--accent-2));
+  color: #fff;
+  box-shadow: 0 4px 12px var(--shadow);
+}
+.tabs a:not(.activa):hover { color: var(--text); background: var(--card-2); }
+
+@media (max-width: 560px) {
+  .tabs a { font-size: .8rem; padding: 10px 4px; }
+}
+
+/* =====================================================================
+   BOTONES
+   ===================================================================== */
+button, .btn { font-family: inherit; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 11px 16px;
+  font-size: .95rem;
+  font-weight: 700;
+  border-radius: var(--radio);
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+  text-decoration: none;
+  transition: filter .12s ease;
+}
+.btn:hover:not(:disabled) { filter: brightness(1.12); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.btn.primario {
+  border: none;
+  background: linear-gradient(120deg, var(--accent), var(--accent-2));
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  font-weight: 800;
+  box-shadow: 0 8px 20px var(--shadow);
+}
+.btn.primario:active:not(:disabled) { background: var(--accent-press); }
+.btn.bloque { width: 100%; }
+.btn.peligro { color: var(--danger); border-color: var(--danger); }
+.btn.peligro:hover:not(:disabled) { background: var(--danger-soft); }
+.btn.pequeno { padding: 7px 12px; font-size: .85rem; }
+.btn.icono { padding: 8px 11px; }
+
+/* Botón "salir" de la cabecera */
+.btn.salir { padding: 8px 14px; font-size: .88rem; }
+
+/* =====================================================================
+   FORMULARIOS
+   ===================================================================== */
+label.campo {
+  display: block;
+  font-weight: 600;
+  margin: 14px 0 6px;
+  font-size: .88rem;
+  color: var(--muted);
+}
+input, select, textarea {
+  width: 100%;
+  padding: 11px 12px;
+  font-size: 1rem;
+  font-family: inherit;
+  border-radius: var(--radio-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+select { cursor: pointer; }
+textarea { resize: vertical; min-height: 64px; }
+input::placeholder, textarea::placeholder { color: #5a6f8f; }
+
+/* El navegador pinta el autocompletado con fondo y texto claros (se ve
+   "en blanco" sobre el tema oscuro). Forzamos el fondo y el color del tema. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+select:-webkit-autofill,
+textarea:-webkit-autofill {
+  -webkit-text-fill-color: var(--text);
+  caret-color: var(--text);
+  -webkit-box-shadow: 0 0 0 1000px var(--bg) inset;
+  box-shadow: 0 0 0 1000px var(--bg) inset;
+  transition: background-color 9999s ease-out 0s;
+}
+
+.fila-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 480px) { .fila-form { grid-template-columns: 1fr; } }
+
+/* =====================================================================
+   TARJETAS
+   ===================================================================== */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radio-lg);
+  padding: 18px;
+  box-shadow: var(--shadow-card);
+  margin-bottom: var(--sp-3);
+}
+.card.plano { box-shadow: none; }
+
+.card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap; margin-bottom: var(--sp-3);
+}
+.card-header h2 { margin: 0; }
+
+/* =====================================================================
+   TABLAS DE DATOS
+   ===================================================================== */
+.tabla-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radio);
+  -webkit-overflow-scrolling: touch;
+}
+table.datos {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 560px;
+  font-size: .88rem;
+  background: var(--card);
+}
+table.datos th, table.datos td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+table.datos thead th {
+  background: var(--bg-2);
+  font-size: .72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  color: var(--muted);
+  position: sticky; top: 0;
+}
+table.datos th.centro, table.datos td.centro { text-align: center; }
+table.datos tbody tr:last-child td { border-bottom: none; }
+table.datos tbody tr:hover td { background: rgba(255,255,255,.03); }
+
+/* Cabeceras ordenables */
+table.datos th.orden { cursor: pointer; user-select: none; }
+table.datos th.orden:hover { color: var(--text); }
+table.datos th.orden .flecha { opacity: .4; font-size: .7em; margin-left: 3px; }
+table.datos th.orden.asc .flecha,
+table.datos th.orden.desc .flecha { opacity: 1; color: var(--accent); }
+
+/* Fila pulsable (abrir ficha) */
+table.datos tr.pulsable { cursor: pointer; }
+
+/* =====================================================================
+   BADGES / CHIPS
+   ===================================================================== */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: .74rem;
+  font-weight: 700;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--muted);
+}
+.badge.ok     { color: var(--good);   background: var(--good-soft);   border-color: transparent; }
+.badge.warn   { color: var(--warn);   background: var(--warn-soft);   border-color: transparent; }
+.badge.danger { color: var(--danger); background: var(--danger-soft); border-color: transparent; }
+.badge.info   { color: var(--info);   background: var(--info-soft);   border-color: transparent; }
+.badge.dorsal {
+  min-width: 26px; justify-content: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--text); background: var(--card-2); border-color: var(--border);
+}
+
+/* Posición (código corto) */
+.pos-tag {
+  display: inline-block;
+  min-width: 34px; text-align: center;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: .72rem; font-weight: 800;
+  background: var(--card-2); color: var(--text);
+}
+
+/* =====================================================================
+   ESTADOS VACÍOS
+   ===================================================================== */
+.vacio {
+  text-align: center;
+  padding: 40px 24px;
+  color: var(--muted);
+}
+.vacio .emoji { font-size: 2.2rem; display: block; margin-bottom: 10px; }
+.vacio h3 { color: var(--text); margin-bottom: 6px; }
+.vacio p { margin: 0 auto 16px; max-width: 42ch; }
+
+/* =====================================================================
+   MODAL / PANEL
+   ===================================================================== */
+.modal-fondo {
+  position: fixed; inset: 0;
+  background: rgba(3,9,18,.72);
+  display: flex; align-items: flex-end; justify-content: center;
+  z-index: 50;
+  padding: 0;
+}
+@media (min-width: 620px) {
+  .modal-fondo { align-items: center; padding: 20px; }
+}
+.modal {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radio-lg) var(--radio-lg) 0 0;
+  width: 100%;
+  max-width: 560px;
+  max-height: 92vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-card);
+  animation: subir .22s ease;
+}
+@media (min-width: 620px) {
+  .modal { border-radius: var(--radio-lg); }
+}
+@keyframes subir { from { transform: translateY(16px); opacity: 0; } to { transform: none; opacity: 1; } }
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0;
+  background: var(--card);
+  z-index: 1;
+}
+.modal-header h2 { margin: 0; font-size: 1.05rem; }
+.modal-body { padding: 18px; }
+.modal-cerrar {
+  border: none; background: none; color: var(--muted);
+  font-size: 1.5rem; line-height: 1; cursor: pointer; padding: 4px 8px;
+}
+.modal-cerrar:hover { color: var(--text); }
+
+/* =====================================================================
+   TOAST (aviso flotante no bloqueante)
+   ===================================================================== */
+#toast-cont {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+  z-index: 80; display: flex; flex-direction: column; gap: 8px;
+  width: max-content; max-width: 90vw;
+}
+.toast {
+  padding: 12px 18px;
+  border-radius: var(--radio);
+  background: var(--card-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+  font-size: .9rem; font-weight: 600;
+  animation: subir .2s ease;
+}
+.toast.ok     { border-color: var(--good);   }
+.toast.error  { border-color: var(--danger); }
+.toast.warn   { border-color: var(--warn);   }
+
+/* =====================================================================
+   UTILIDADES DE MAQUETA
+   ===================================================================== */
+.grid-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+.stat {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radio);
+  padding: 14px 16px;
+}
+.stat .valor { font-size: 1.7rem; font-weight: 800; line-height: 1.1; }
+.stat .etq { font-size: .76rem; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; }
+
+.acciones { display: flex; gap: 8px; flex-wrap: wrap; }
+.spacer { flex: 1; }
+.mt-2 { margin-top: var(--sp-2); }
+.mt-3 { margin-top: var(--sp-3); }
+.mb-0 { margin-bottom: 0; }
+
+/* Cargando */
+.cargando { text-align: center; color: var(--muted); padding: 30px; }
+.cargando::after { content: "…"; animation: puntos 1.2s steps(4) infinite; }
+@keyframes puntos { to { content: "……"; } }
+
+/* Aviso inline (no bloqueante) */
+.aviso-inline {
+  display: flex; gap: 8px; align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: var(--radio-sm);
+  font-size: .84rem;
+  background: var(--warn-soft);
+  color: var(--warn);
+  border: 1px solid transparent;
+  margin: 10px 0;
+}
+.aviso-inline.error { background: var(--danger-soft); color: var(--danger); }
+.error-texto { color: var(--danger); font-size: .86rem; min-height: 1em; }

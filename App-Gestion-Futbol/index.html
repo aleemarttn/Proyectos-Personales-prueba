@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inicio — Gestión Fútbol</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .dash { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; align-items: start; }
+    .dash .ancho { grid-column: 1 / -1; }
+    .racha { display: flex; gap: 6px; }
+    .racha .r { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 800; }
+    .racha .r.V { background: var(--good-soft); color: var(--good); }
+    .racha .r.E { background: var(--warn-soft); color: var(--warn); }
+    .racha .r.D { background: var(--danger-soft); color: var(--danger); }
+    .lista-nombres { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .balance-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center; }
+    .balance-grid .b .v { font-size: 1.5rem; font-weight: 800; }
+    .balance-grid .b .e { font-size: .72rem; color: var(--muted); text-transform: uppercase; }
+    .prox-partido .rival { font-size: 1.3rem; font-weight: 800; }
+    .prox-partido .dias { font-size: 2.4rem; font-weight: 800; color: var(--accent); line-height: 1; }
+    /* Calendario de próximos partidos */
+    .cal-lista { display: flex; flex-direction: column; gap: 6px; }
+    .cal-fila {
+      display: grid; grid-template-columns: auto 1fr auto auto; gap: 10px; align-items: center;
+      padding: 9px 12px; border-radius: var(--radio-sm);
+      background: var(--bg-2); border: 1px solid var(--border);
+      text-decoration: none; color: var(--text);
+    }
+    .cal-fila:hover { border-color: var(--accent); }
+    .cal-fecha { font-size: .8rem; color: var(--muted); white-space: nowrap; text-transform: capitalize; }
+    .cal-rival { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cal-dias { font-size: .78rem; color: var(--accent); font-weight: 700; white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar" id="cabecera"></div>
+    <nav class="tabs" id="tabs"></nav>
+    <div id="dash"><div class="cargando">Cargando panel</div></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+  App.iniciar({ tab: "inicio" }).then(async (ctx) => {
+    const db = App.db;
+    const $dash = document.getElementById("dash");
+    const tid = App.teamId();
+    const hoy = App.hoyISO();
+
+    // ---- Carga de todo en paralelo ----
+    const [matchesR, playersR, injuriesR, suspR, statsR, asisR, trainR, attR, estR] = await Promise.all([
+      db.from("matches").select("*").eq("team_id", tid),
+      db.from("players").select("id, name, shirt_number, active").eq("team_id", tid).eq("active", true),
+      db.from("injuries").select("player_id, expected_return_date").eq("team_id", tid).is("end_date", null),
+      db.from("suspensions").select("player_id, reason, matches, completed").eq("team_id", tid),
+      db.from("v_estadisticas_jugador").select("*").eq("team_id", tid),
+      db.from("v_asistencia_entrenamientos").select("*").eq("team_id", tid),
+      db.from("trainings").select("id, session_date").eq("team_id", tid),
+      db.from("training_attendance").select("training_id, status_code"),
+      db.from("attendance_statuses").select("code, counts_as_present"),
+    ]);
+
+    const matches = matchesR.data || [];
+    const players = (playersR.data || []);
+    const injuries = injuriesR.data || [];
+    const suspensions = suspR.data || [];
+    const stats = statsR.data || [];
+    const asisJug = asisR.data || [];
+    const trainings = trainR.data || [];
+    const attendance = attR.data || [];
+    const presentBy = {}; for (const e of (estR.data || [])) presentBy[e.code] = e.counts_as_present;
+    const nombre = (pid) => (players.find(p => p.id === pid) || stats.find(s => s.player_id === pid) || {}).name
+                            || (stats.find(s => s.player_id === pid) || {}).jugador || "—";
+
+    // ---- Cálculos ----
+    const jugados = matches.filter(m => m.status === "jugado");
+    const balance = { pj: jugados.length, g: 0, e: 0, p: 0, gf: 0, gc: 0 };
+    for (const m of jugados) {
+      const f = m.goals_for ?? 0, c = m.goals_against ?? 0;
+      balance.gf += f; balance.gc += c;
+      if (f > c) balance.g++; else if (f === c) balance.e++; else balance.p++;
+    }
+
+    // Próximo partido (programado, fecha >= hoy, el más cercano)
+    const proximos = matches.filter(m => m.status === "programado" && m.match_date >= hoy)
+      .sort((a, b) => a.match_date.localeCompare(b.match_date));
+    const proximo = proximos[0] || null;
+
+    // Partidos sin cerrar (fecha pasada y aún programado)
+    const sinCerrar = matches.filter(m => m.status === "programado" && m.match_date < hoy)
+      .sort((a, b) => b.match_date.localeCompare(a.match_date));
+
+    // Últimos 5 resultados (cronológico)
+    const ultimos5 = [...jugados].sort((a, b) => a.match_date.localeCompare(b.match_date)).slice(-5);
+
+    // Disponibilidad
+    const lesionadosIds = new Set(injuries.map(i => i.player_id));
+    const sancionadosIds = new Set(suspensions.filter(s => !s.completed).map(s => s.player_id));
+    const disponibles = players.filter(p => !lesionadosIds.has(p.id) && !sancionadosIds.has(p.id));
+
+    // Alerta de ciclo de amarillas
+    const umbral = ctx.team.yellow_cycle || 5;
+    const ciclosCumplidos = {}; // player_id -> nº sanciones de ciclo cumplidas
+    for (const s of suspensions) if (s.reason === "ciclo_amarillas" && s.completed) ciclosCumplidos[s.player_id] = (ciclosCumplidos[s.player_id] || 0) + 1;
+    const aUnaAmarilla = stats.filter(s => {
+      const consumidas = (ciclosCumplidos[s.player_id] || 0) * umbral;
+      const ciclo = (s.amarillas || 0) - consumidas;
+      return ciclo === umbral - 1;
+    });
+
+    // Asistencia últimos 7 y 30 días
+    const restaDias = (iso) => App.diasHasta(iso); // negativo = pasado
+    const trainingsRecientes = (dias) => {
+      const ids = new Set(trainings.filter(t => -restaDias(t.session_date) <= dias && restaDias(t.session_date) <= 0).map(t => t.id));
+      let pres = 0, tot = 0;
+      for (const a of attendance) if (ids.has(a.training_id)) { tot++; if (presentBy[a.status_code]) pres++; }
+      return tot ? Math.round(100 * pres / tot) : null;
+    };
+    const asis7 = trainingsRecientes(7), asis30 = trainingsRecientes(30);
+
+    // 3 peores asistencias (con al menos 1 sesión registrada)
+    const peores = [...asisJug].filter(a => a.sesiones_registradas > 0 && a.activo !== false)
+      .sort((a, b) => (a.porcentaje_asistencia ?? 100) - (b.porcentaje_asistencia ?? 100)).slice(0, 3);
+
+    // ================= RENDER =================
+    const badgeNombres = (arr, getName, cls = "") => arr.length
+      ? `<div class="lista-nombres">${arr.map(x => `<span class="badge ${cls}">${App.esc(getName(x))}</span>`).join("")}</div>`
+      : '<p class="muted" style="margin:6px 0 0; font-size:.85rem">Ninguno.</p>';
+
+    const cardProximo = proximo ? `
+      <div class="card prox-partido">
+        <h3>Próximo partido</h3>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px">
+          <div>
+            <div class="rival">${App.esc(proximo.opponent)}</div>
+            <div class="muted" style="font-size:.88rem">
+              ${App.fechaBonita(proximo.match_date)}${proximo.kickoff_time ? " · " + proximo.kickoff_time.slice(0,5) : ""}
+              · ${proximo.venue === "casa" ? "En casa" : "Fuera"}
+            </div>
+          </div>
+          <div style="text-align:center">
+            <div class="dias">${Math.max(0, App.diasHasta(proximo.match_date))}</div>
+            <div class="muted" style="font-size:.72rem">días</div>
+          </div>
+        </div>
+      </div>` : `
+      <div class="card"><h3>Próximo partido</h3><p class="muted" style="margin:6px 0 0">No hay partidos programados.</p></div>`;
+
+    const cardBalance = `
+      <div class="card">
+        <h3>Balance de la temporada</h3>
+        <div class="balance-grid">
+          <div class="b"><div class="v">${balance.g}</div><div class="e">Ganados</div></div>
+          <div class="b"><div class="v">${balance.e}</div><div class="e">Empatados</div></div>
+          <div class="b"><div class="v">${balance.p}</div><div class="e">Perdidos</div></div>
+        </div>
+        <div class="balance-grid mt-3">
+          <div class="b"><div class="v">${balance.pj}</div><div class="e">Jugados</div></div>
+          <div class="b"><div class="v">${balance.gf}:${balance.gc}</div><div class="e">Goles</div></div>
+          <div class="b"><div class="v">${balance.gf - balance.gc >= 0 ? "+" : ""}${balance.gf - balance.gc}</div><div class="e">Diferencia</div></div>
+        </div>
+      </div>`;
+
+    const cardRacha = ultimos5.length ? `
+      <div class="card">
+        <h3>Últimos resultados</h3>
+        <div class="racha">${ultimos5.map(m => {
+          const f = m.goals_for ?? 0, c = m.goals_against ?? 0;
+          const r = f > c ? "V" : f === c ? "E" : "D";
+          return `<span class="r ${r}" title="${App.esc(m.opponent)} ${f}-${c}">${r}</span>`;
+        }).join("")}</div>
+      </div>` : "";
+
+    const cardDisponibilidad = `
+      <div class="card">
+        <h3>Disponibilidad</h3>
+        <div class="balance-grid">
+          <div class="b"><div class="v" style="color:var(--good)">${disponibles.length}</div><div class="e">Disponibles</div></div>
+          <div class="b"><div class="v" style="color:var(--danger)">${lesionadosIds.size}</div><div class="e">Lesionados</div></div>
+          <div class="b"><div class="v" style="color:var(--warn)">${sancionadosIds.size}</div><div class="e">Sancionados</div></div>
+        </div>
+        ${lesionadosIds.size ? `<div class="mt-3"><strong style="font-size:.85rem">Lesionados</strong>${badgeNombres([...lesionadosIds], nombre, "danger")}</div>` : ""}
+        ${sancionadosIds.size ? `<div class="mt-2"><strong style="font-size:.85rem">Sancionados</strong>${badgeNombres([...sancionadosIds], nombre, "warn")}</div>` : ""}
+      </div>`;
+
+    const cardSancion = `
+      <div class="card">
+        <h3>A una amarilla de sanción</h3>
+        <p class="muted" style="margin:0; font-size:.82rem">Ciclo de ${umbral} amonestaciones.</p>
+        ${badgeNombres(aUnaAmarilla, (s) => `${s.jugador} (${s.amarillas})`, "warn")}
+      </div>`;
+
+    const cardAsistencia = `
+      <div class="card">
+        <h3>Asistencia a entrenamientos</h3>
+        <div class="balance-grid">
+          <div class="b"><div class="v">${asis7 != null ? asis7 + "%" : "—"}</div><div class="e">Últimos 7 días</div></div>
+          <div class="b"><div class="v">${asis30 != null ? asis30 + "%" : "—"}</div><div class="e">Últimos 30 días</div></div>
+        </div>
+        ${peores.length ? `<div class="mt-3"><strong style="font-size:.85rem">Peor asistencia</strong>
+          <div class="lista-nombres">${peores.map(p => `<span class="badge ${(p.porcentaje_asistencia ?? 0) < 50 ? "danger" : "warn"}">${App.esc(p.jugador)} ${App.num(p.porcentaje_asistencia, 0)}%</span>`).join("")}</div></div>` : ""}
+      </div>`;
+
+    const cardSinCerrar = sinCerrar.length ? `
+      <div class="card ancho" style="border-color:var(--warn)">
+        <h3>⚠ Partidos sin cerrar</h3>
+        <p class="muted" style="margin:0 0 8px; font-size:.85rem">Ya se jugaron pero siguen sin minutos ni resultado. Ciérralos para que las estadísticas cuadren.</p>
+        <div class="lista-nombres">${sinCerrar.map(m => `<a class="badge warn" href="partidos.html?id=${m.id}">${App.esc(m.opponent)} · ${App.fechaCorta(m.match_date)}</a>`).join("")}</div>
+      </div>` : "";
+
+    // Calendario: próximos partidos (los ya programados, del más cercano en adelante)
+    const cardCalendario = proximos.length ? `
+      <div class="card ancho">
+        <div class="card-header" style="margin-bottom:10px">
+          <h3 style="margin:0">Calendario · próximos partidos</h3>
+          <a class="btn pequeno" href="partidos.html">Ver todos</a>
+        </div>
+        <div class="cal-lista">
+          ${proximos.slice(0, 6).map(m => {
+            const d = Math.max(0, App.diasHasta(m.match_date));
+            return `<a class="cal-fila" href="partidos.html?id=${m.id}">
+              <span class="cal-fecha">${App.fechaCorta(m.match_date)}${m.kickoff_time ? " · " + m.kickoff_time.slice(0,5) : ""}</span>
+              <span class="cal-rival">${App.esc(m.opponent)}</span>
+              <span class="badge">${m.venue === "casa" ? "Casa" : "Fuera"}</span>
+              <span class="cal-dias">${d === 0 ? "hoy" : "en " + d + " d"}</span>
+            </a>`;
+          }).join("")}
+        </div>
+      </div>` : `
+      <div class="card ancho">
+        <div class="card-header" style="margin-bottom:10px">
+          <h3 style="margin:0">Calendario · próximos partidos</h3>
+          <a class="btn pequeno" href="partidos.html">Ir a partidos</a>
+        </div>
+        <p class="muted" style="margin:0">No hay partidos programados. Añádelos (uno o el calendario entero) desde la pestaña Partidos.</p>
+      </div>`;
+
+    $dash.innerHTML = `<div class="dash">
+      ${cardProximo}${cardBalance}${cardRacha}${cardDisponibilidad}${cardSancion}${cardAsistencia}${cardSinCerrar}${cardCalendario}
+    </div>`;
+  });
+  </script>
+</body>
+</html>

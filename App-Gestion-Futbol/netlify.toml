@@ -1,0 +1,6 @@
+# Sitio estático puro: no hay build. Se publica esta carpeta tal cual.
+# En Netlify, pon "Base directory" = App-Gestion-Futbol y deja el
+# "Build command" vacío; esta config hace el resto.
+[build]
+  publish = "."
+  command = ""

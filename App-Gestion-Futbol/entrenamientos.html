@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Entrenamientos — Gestión Fútbol</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* Rejilla de asistencia jugador × sesión */
+    .grid-asis { border-collapse: collapse; font-size: .8rem; }
+    .grid-asis th, .grid-asis td { border: 1px solid var(--border); padding: 4px 6px; text-align: center; white-space: nowrap; }
+    .grid-asis th.jug, .grid-asis td.jug { text-align: left; position: sticky; left: 0; background: var(--card); z-index: 1; }
+    .grid-asis thead th { background: var(--bg-2); font-size: .7rem; color: var(--muted); }
+    .celda { width: 22px; height: 22px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: .72rem; }
+    .celda.pres { background: var(--good-soft); color: var(--good); }
+    .celda.aus  { background: var(--danger-soft); color: var(--danger); }
+    .celda.vacio { background: transparent; color: var(--muted); }
+    /* Pasar lista */
+    .lista-asis .fila-asis { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radio-sm); background: var(--bg-2); margin-bottom: 8px; flex-wrap: wrap; }
+    .lista-asis .fila-asis .nom { flex: 1; min-width: 120px; font-weight: 700; }
+    .lista-asis select { width: auto; min-width: 150px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar" id="cabecera"></div>
+    <nav class="tabs" id="tabs"></nav>
+    <div id="vista"><div class="cargando">Cargando</div></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+  App.iniciar({ tab: "entrenamientos" }).then(async (ctx) => {
+    const db = App.db;
+    const $vista = document.getElementById("vista");
+
+    let PLAYERS = [], ESTADOS = [];
+    const estadoInfo = (c) => ESTADOS.find(e => e.code === c) || { label: c, counts_as_present: false };
+    const FOCOS = [
+      { code: "fisico", label: "Físico" }, { code: "tactico", label: "Táctico" },
+      { code: "tecnico", label: "Técnico" }, { code: "recuperacion", label: "Recuperación" },
+      { code: "partido", label: "Partido" },
+    ];
+    const focoLabel = (c) => (FOCOS.find(f => f.code === c) || {}).label || c || "—";
+
+    async function cargarCatalogos() {
+      const tid = App.teamId();
+      const [plaR, estR] = await Promise.all([
+        db.from("players").select("id, name, shirt_number, active").eq("team_id", tid).eq("active", true),
+        db.from("attendance_statuses").select("*"),
+      ]);
+      PLAYERS = (plaR.data || []).sort((a, b) => (a.shirt_number ?? 999) - (b.shirt_number ?? 999));
+      ESTADOS = estR.data || [];
+    }
+
+    // ---- Router por ?id= ----
+    const sesionId = () => new URLSearchParams(location.search).get("id");
+    function irA(id) {
+      history.pushState({}, "", id ? `entrenamientos.html?id=${id}` : "entrenamientos.html");
+      router();
+    }
+    window.addEventListener("popstate", router);
+
+    async function router() {
+      await cargarCatalogos();
+      const id = sesionId();
+      if (id) renderPasarLista(id);
+      else renderPrincipal();
+    }
+
+    // ===================================================================
+    //  VISTA PRINCIPAL: sesiones + histórico + evolución
+    // ===================================================================
+    async function renderPrincipal() {
+      $vista.innerHTML = '<div class="cargando">Cargando entrenamientos</div>';
+      const tid = App.teamId();
+      const [sesR, asisR] = await Promise.all([
+        db.from("trainings").select("*").eq("team_id", tid).order("session_date", { ascending: false }),
+        db.from("training_attendance").select("training_id, player_id, status_code"),
+      ]);
+      const sesiones = sesR.data || [];
+      const asistencias = asisR.data || [];
+
+      if (sesiones.length === 0) {
+        const cont = document.createElement("div"); cont.className = "card";
+        $vista.innerHTML = "";
+        $vista.appendChild(cont);
+        App.vacio(cont, {
+          emoji: "🏃", titulo: "Aún no hay entrenamientos",
+          texto: "Crea la primera sesión para empezar a pasar lista al equipo.",
+          accionHTML: '<button class="btn primario" id="btn-nueva2">+ Nueva sesión</button>'
+        });
+        document.getElementById("btn-nueva2").onclick = () => formSesion();
+        return;
+      }
+
+      // Asistencias por sesión
+      const presentByStatus = {};
+      for (const e of ESTADOS) presentByStatus[e.code] = e.counts_as_present;
+      const resumenSesion = {};
+      for (const a of asistencias) {
+        const r = (resumenSesion[a.training_id] ||= { pres: 0, total: 0 });
+        r.total++; if (presentByStatus[a.status_code]) r.pres++;
+      }
+
+      const TOPE = 6; // en temporada hay cientos de sesiones: se muestran las últimas
+
+      const filaSesionHTML = (s) => {
+        const r = resumenSesion[s.id] || { pres: 0, total: 0 };
+        const pct = r.total ? Math.round(100 * r.pres / r.total) : null;
+        return `
+          <tr class="pulsable" data-id="${s.id}">
+            <td>${App.fechaCorta(s.session_date)}</td>
+            <td>${focoLabel(s.focus)}</td>
+            <td class="centro">${s.duration_min ? s.duration_min + "′" : "—"}</td>
+            <td class="centro">${r.total ? `${r.pres}/${r.total}` : '<span class="muted">sin lista</span>'}</td>
+            <td class="centro">${pct != null ? `<span class="badge ${pct >= 75 ? "ok" : pct >= 50 ? "warn" : "danger"}">${pct}%</span>` : "—"}</td>
+          </tr>`;
+      };
+
+      $vista.innerHTML = `
+        <div class="card">
+          <div class="card-header">
+            <h2>Entrenamientos</h2>
+            <div class="acciones">
+              <button class="btn pequeno" id="btn-nueva">+ Sesión</button>
+              <button class="btn pequeno" id="btn-export">Exportar CSV</button>
+            </div>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px; flex-wrap:wrap">
+            <label class="muted" style="font-size:.85rem">Desde</label>
+            <input id="ses-desde" type="date" style="width:auto" />
+            <label class="muted" style="font-size:.85rem">Hasta</label>
+            <input id="ses-hasta" type="date" style="width:auto" />
+            <button class="btn pequeno" id="btn-ses-limpiar">Ver últimas ${TOPE}</button>
+          </div>
+          <div class="tabla-wrap">
+            <table class="datos">
+              <thead><tr><th>Fecha</th><th>Foco</th><th class="centro">Dur.</th><th class="centro">Asist.</th><th class="centro">%</th></tr></thead>
+              <tbody id="tbody-ses"></tbody>
+            </table>
+          </div>
+          <p class="muted" id="pie-ses" style="font-size:.8rem; margin:8px 0 0"></p>
+        </div>
+
+        <div class="card">
+          <h2>Evolución de la asistencia por semana</h2>
+          <p class="muted" style="font-size:.8rem; margin:-4px 0 10px">
+            Cada punto es una semana (media de asistencia de sus sesiones). Se muestran las últimas 8 semanas registradas.
+          </p>
+          <canvas id="ch-evo" height="120"></canvas>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>Histórico jugador × sesión</h2>
+            <button class="btn pequeno" id="btn-sel-ses">Elegir sesiones</button>
+          </div>
+          <p class="muted" id="info-hist" style="font-size:.8rem; margin:0 0 8px"></p>
+          <div class="tabla-wrap" id="grid-wrap"></div>
+        </div>`;
+
+      // ---- Tabla de sesiones: por defecto las últimas 6. Para buscar se
+      //      filtra por un RANGO de fechas (desde–hasta), sin texto libre. ----
+      function pintarTablaSesiones(desde = "", hasta = "") {
+        const filtrando = desde || hasta;
+        const lista = filtrando
+          ? sesiones.filter(s => (!desde || s.session_date >= desde) && (!hasta || s.session_date <= hasta))
+          : sesiones.slice(0, TOPE); // sesiones ya vienen ordenadas de más nueva a más vieja
+        const tbody = document.getElementById("tbody-ses");
+        tbody.innerHTML = lista.map(filaSesionHTML).join("") ||
+          '<tr><td colspan="5" class="muted centro" style="padding:14px">No hay sesiones en ese rango.</td></tr>';
+        document.getElementById("pie-ses").textContent = filtrando
+          ? `${lista.length} sesión(es) en el rango elegido.`
+          : `Mostrando las últimas ${Math.min(TOPE, sesiones.length)} de ${sesiones.length} sesiones. Filtra por fechas para ver otras.`;
+        tbody.querySelectorAll("tr.pulsable").forEach(tr => tr.addEventListener("click", () => irA(tr.dataset.id)));
+      }
+
+      const iDesde = document.getElementById("ses-desde");
+      const iHasta = document.getElementById("ses-hasta");
+      if (sesiones.length) {
+        const minF = sesiones[sesiones.length - 1].session_date, maxF = sesiones[0].session_date;
+        iDesde.min = minF; iDesde.max = maxF; iHasta.min = minF; iHasta.max = maxF;
+      }
+      const aplicarRango = () => pintarTablaSesiones(iDesde.value, iHasta.value);
+      iDesde.addEventListener("change", aplicarRango);
+      iHasta.addEventListener("change", aplicarRango);
+      document.getElementById("btn-ses-limpiar").addEventListener("click", () => { iDesde.value = ""; iHasta.value = ""; pintarTablaSesiones(); });
+      document.getElementById("btn-nueva").onclick = () => formSesion();
+      document.getElementById("btn-export").onclick = () => exportarAsistencia(sesiones, asistencias);
+      pintarTablaSesiones();
+
+      // ---- Histórico jugador × sesión: sesiones elegibles (por defecto, 6) ----
+      let selSesiones = new Set(sesiones.slice(0, TOPE).map(s => s.id));
+      const refrescarHistorico = () => {
+        document.getElementById("info-hist").textContent =
+          `Mostrando ${selSesiones.size} sesión(es). Pulsa “Elegir sesiones” para comparar las que quieras.`;
+        pintarGrid(sesiones.filter(s => selSesiones.has(s.id)), asistencias);
+      };
+      document.getElementById("btn-sel-ses").onclick = () =>
+        abrirSelectorSesiones(sesiones, selSesiones, TOPE, (nueva) => { selSesiones = nueva; refrescarHistorico(); });
+      refrescarHistorico();
+
+      pintarEvolucion(sesiones, asistencias, presentByStatus);
+    }
+
+    // Rejilla jugador × sesión (recibe SOLO las sesiones a mostrar)
+    function pintarGrid(sesiones, asistencias) {
+      const wrap = document.getElementById("grid-wrap");
+      if (!sesiones.length) {
+        wrap.innerHTML = '<p class="muted" style="padding:12px 4px">Selecciona alguna sesión para ver el histórico.</p>';
+        return;
+      }
+      // Orden cronológico ascendente para la rejilla
+      const ses = [...sesiones].sort((a, b) => a.session_date.localeCompare(b.session_date));
+      const idsSes = new Set(ses.map(s => s.id));
+      const mapa = {}; // player_id -> {training_id -> status_code}
+      for (const a of asistencias) {
+        if (!idsSes.has(a.training_id)) continue; // solo las sesiones mostradas cuentan
+        (mapa[a.player_id] ||= {})[a.training_id] = a.status_code;
+      }
+
+      const cabecera = ses.map(s => `<th title="${App.fechaBonita(s.session_date)}">${s.session_date.slice(8, 10)}/${s.session_date.slice(5, 7)}</th>`).join("");
+
+      const filas = PLAYERS.map(p => {
+        let pres = 0, tot = 0;
+        const celdas = ses.map(s => {
+          const code = mapa[p.id] && mapa[p.id][s.id];
+          if (!code) return '<td><span class="celda vacio">·</span></td>';
+          const info = estadoInfo(code);
+          tot++; if (info.counts_as_present) pres++;
+          const cls = info.counts_as_present ? "pres" : "aus";
+          const letra = info.counts_as_present ? "P" : "A";
+          return `<td><span class="celda ${cls}" title="${App.esc(info.label)}">${letra}</span></td>`;
+        }).join("");
+        const pct = tot ? Math.round(100 * pres / tot) : null;
+        return `<tr><td class="jug">${p.shirt_number ?? "—"} · ${App.esc(p.name)}</td>${celdas}<td><strong>${pct != null ? pct + "%" : "—"}</strong></td></tr>`;
+      }).join("");
+
+      wrap.innerHTML = `<table class="grid-asis"><thead><tr><th class="jug">Jugador</th>${cabecera}<th>%</th></tr></thead><tbody>${filas}</tbody></table>`;
+    }
+
+    // Selector del histórico en modo SLOTS: hasta 10 fechas (aunque sean de
+    // semanas distintas), cada una elegida en su calendario. Sin "Todas"
+    // (en una temporada son cientos). Por defecto, las últimas `tope`.
+    function abrirSelectorSesiones(sesiones, seleccionActual, tope, onAplicar) {
+      const MAX = 10;
+      const ordenDesc = [...sesiones].sort((a, b) => b.session_date.localeCompare(a.session_date));
+      const minF = ordenDesc.length ? ordenDesc[ordenDesc.length - 1].session_date : "";
+      const maxF = ordenDesc.length ? ordenDesc[0].session_date : "";
+      const fechasValidas = new Set(sesiones.map(s => s.session_date));
+      const fechaDe = (id) => (sesiones.find(s => s.id === id) || {}).session_date;
+
+      // Fechas iniciales: las de la selección actual, o las últimas `tope`
+      let fechas = [...seleccionActual].map(fechaDe).filter(Boolean).sort((a, b) => b.localeCompare(a));
+      if (!fechas.length) fechas = ordenDesc.slice(0, tope).map(s => s.session_date);
+      fechas = fechas.slice(0, MAX);
+
+      App.modal({
+        titulo: "Elegir sesiones del histórico",
+        contenido: `
+          <p class="muted" style="font-size:.82rem; margin-top:0">
+            Añade hasta ${MAX} fechas para comparar (pueden ser de semanas distintas).
+            Por defecto aparecen las últimas ${tope}.
+          </p>
+          <div class="acciones" style="margin-bottom:10px">
+            <button class="btn pequeno" id="ss-6">Últimas ${tope}</button>
+            <button class="btn pequeno" id="ss-add">+ Añadir fecha</button>
+          </div>
+          <div id="ss-slots"></div>
+          <p class="muted" id="ss-info" style="font-size:.8rem"></p>
+          <div class="acciones mt-3"><button class="btn primario" id="ss-ok">Aplicar</button></div>`,
+        onMontar(cuerpo, cerrar) {
+          const box = cuerpo.querySelector("#ss-slots");
+          const info = cuerpo.querySelector("#ss-info");
+          const btnAdd = cuerpo.querySelector("#ss-add");
+
+          const pintar = () => {
+            box.innerHTML = fechas.length ? fechas.map((f, i) => `
+              <div style="display:flex; gap:8px; align-items:center; margin-bottom:6px">
+                <span class="badge" style="min-width:26px; justify-content:center">${i + 1}</span>
+                <input type="date" data-i="${i}" value="${f || ""}" min="${minF}" max="${maxF}" style="flex:1" />
+                <button class="btn pequeno peligro" data-del="${i}">✕</button>
+              </div>`).join("")
+              : '<p class="muted" style="font-size:.82rem">Sin fechas. Pulsa «+ Añadir fecha».</p>';
+            const conSesion = fechas.filter(f => f && fechasValidas.has(f)).length;
+            const sinSesion = fechas.filter(f => f && !fechasValidas.has(f)).length;
+            info.textContent = `${conSesion} con sesión${sinSesion ? ` · ${sinSesion} sin sesión ese día (se ignoran)` : ""}.`;
+            btnAdd.disabled = fechas.length >= MAX;
+            box.querySelectorAll("input[data-i]").forEach(inp =>
+              inp.addEventListener("change", () => { fechas[Number(inp.dataset.i)] = inp.value; pintar(); }));
+            box.querySelectorAll("[data-del]").forEach(b =>
+              b.addEventListener("click", () => { fechas.splice(Number(b.dataset.del), 1); pintar(); }));
+          };
+
+          cuerpo.querySelector("#ss-6").onclick = () => { fechas = ordenDesc.slice(0, tope).map(s => s.session_date); pintar(); };
+          btnAdd.onclick = () => { if (fechas.length < MAX) { fechas.push(""); pintar(); } };
+          cuerpo.querySelector("#ss-ok").onclick = () => {
+            const ids = new Set();
+            for (const f of fechas) { const s = sesiones.find(x => x.session_date === f); if (s) ids.add(s.id); }
+            cerrar(); onAplicar(ids);
+          };
+          pintar();
+        }
+      });
+    }
+
+    // Gráfico de evolución por semana (escala category con etiquetas string)
+    function pintarEvolucion(sesiones, asistencias, presentByStatus) {
+      // Agrupar por semana ISO (lunes)
+      const semanaDe = (iso) => {
+        const [y, m, d] = iso.split("-").map(Number);
+        const dt = new Date(y, m - 1, d);
+        const dia = (dt.getDay() + 6) % 7; // 0 = lunes
+        dt.setDate(dt.getDate() - dia);
+        return App.fechaISO(dt);
+      };
+      const porSesion = {};
+      for (const a of asistencias) {
+        const r = (porSesion[a.training_id] ||= { pres: 0, tot: 0 });
+        r.tot++; if (presentByStatus[a.status_code]) r.pres++;
+      }
+      const semanas = {};
+      for (const s of sesiones) {
+        const w = semanaDe(s.session_date);
+        const r = porSesion[s.id]; if (!r || !r.tot) continue;
+        const acc = (semanas[w] ||= { pres: 0, tot: 0 });
+        acc.pres += r.pres; acc.tot += r.tot;
+      }
+      // Solo las últimas 8 semanas: en temporada completa son demasiadas.
+      const labels = Object.keys(semanas).sort().slice(-8);
+      const datos = labels.map(w => Math.round(100 * semanas[w].pres / semanas[w].tot));
+
+      const canvas = document.getElementById("ch-evo");
+      if (!labels.length) { canvas.parentElement.innerHTML = '<h2>Evolución de la asistencia por semana</h2><p class="muted">Sin datos de asistencia todavía.</p>'; return; }
+
+      new Chart(canvas, {
+        type: "line",
+        data: {
+          labels: labels.map(App.fechaBonita),
+          datasets: [{ data: datos, borderColor: "#e2231a", backgroundColor: "rgba(226,35,26,.18)", fill: true, tension: .25, pointRadius: 3 }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => c.parsed.y + "% asistencia" } } },
+          scales: {
+            x: { type: "category", ticks: { color: "#90a6c6", maxRotation: 0, autoSkip: true }, grid: { display: false } },
+            y: { beginAtZero: true, max: 100, ticks: { color: "#90a6c6", callback: (v) => v + "%" }, grid: { color: "#244269" } }
+          }
+        }
+      });
+    }
+
+    function exportarAsistencia(sesiones, asistencias) {
+      const mapa = {};
+      for (const a of asistencias) (mapa[a.training_id] ||= {})[a.player_id] = a.status_code;
+      const filas = [];
+      const ses = [...sesiones].sort((a, b) => a.session_date.localeCompare(b.session_date));
+      for (const p of PLAYERS) {
+        for (const s of ses) {
+          const code = mapa[s.id] && mapa[s.id][p.id];
+          if (!code) continue;
+          const info = estadoInfo(code);
+          filas.push({
+            Fecha: s.session_date, Foco: focoLabel(s.focus), Jugador: p.name,
+            Dorsal: p.shirt_number ?? "", Estado: info.label,
+            Presente: info.counts_as_present ? "sí" : "no",
+          });
+        }
+      }
+      App.exportarCSV(filas, `asistencia_entrenamientos_${App.hoyISO()}`);
+    }
+
+    // ===================================================================
+    //  ALTA / EDICIÓN DE SESIÓN
+    // ===================================================================
+    function formSesion(s = {}) {
+      const opcFoco = FOCOS.map(f => `<option value="${f.code}" ${s.focus === f.code ? "selected" : ""}>${f.label}</option>`).join("");
+      App.modal({
+        titulo: s.id ? "Editar sesión" : "Nueva sesión",
+        contenido: `
+          <div class="fila-form">
+            <div><label class="campo" for="s-fecha">Fecha *</label>
+              <input id="s-fecha" type="date" value="${s.session_date || App.hoyISO()}" /></div>
+            <div><label class="campo" for="s-dur">Duración (min)</label>
+              <input id="s-dur" type="number" min="1" max="240" value="${s.duration_min ?? 90}" /></div>
+          </div>
+          <label class="campo" for="s-foco">Foco</label>
+          <select id="s-foco"><option value="">—</option>${opcFoco}</select>
+          <label class="campo" for="s-notas">Notas</label>
+          <textarea id="s-notas">${App.esc(s.notes || "")}</textarea>
+          <p class="error-texto mt-2" id="s-error"></p>
+          <div class="acciones mt-3">
+            <button class="btn primario" id="s-guardar">${s.id ? "Guardar" : "Crear y pasar lista"}</button>
+            ${s.id ? '<button class="btn peligro" id="s-borrar">Eliminar</button>' : ""}
+          </div>`,
+        onMontar(cuerpo, cerrar) {
+          cuerpo.querySelector("#s-guardar").addEventListener("click", async () => {
+            const fecha = cuerpo.querySelector("#s-fecha").value;
+            if (!fecha) { cuerpo.querySelector("#s-error").textContent = "La fecha es obligatoria."; return; }
+            const dur = cuerpo.querySelector("#s-dur").value;
+            const datos = {
+              team_id: App.teamId(), session_date: fecha,
+              duration_min: dur === "" ? null : Number(dur),
+              focus: cuerpo.querySelector("#s-foco").value || null,
+              notes: cuerpo.querySelector("#s-notas").value.trim() || null,
+            };
+            let error, nuevoId = s.id;
+            if (s.id) ({ error } = await db.from("trainings").update(datos).eq("id", s.id));
+            else {
+              const r = await db.from("trainings").insert(datos).select("id").single();
+              error = r.error; nuevoId = r.data && r.data.id;
+            }
+            if (error) {
+              cuerpo.querySelector("#s-error").textContent = error.message.includes("trainings_team_id_session_date")
+                ? "Ya existe una sesión en esa fecha." : "No se pudo guardar: " + error.message;
+              return;
+            }
+            cerrar();
+            App.toast(s.id ? "Sesión actualizada." : "Sesión creada.", "ok");
+            if (s.id) router(); else irA(nuevoId);
+          });
+          const btnBorrar = cuerpo.querySelector("#s-borrar");
+          if (btnBorrar) btnBorrar.addEventListener("click", async () => {
+            const ok = await App.confirmar({ titulo: "Eliminar sesión", mensaje: "Se borrará la sesión y su lista de asistencia.", textoOk: "Eliminar", peligro: true });
+            if (!ok) return;
+            const { error } = await db.from("trainings").delete().eq("id", s.id);
+            if (error) { App.toast("No se pudo eliminar.", "error"); return; }
+            cerrar(); App.toast("Sesión eliminada.", "ok"); irA(null);
+          });
+        }
+      });
+    }
+
+    // ===================================================================
+    //  PASAR LISTA
+    // ===================================================================
+    async function renderPasarLista(id) {
+      $vista.innerHTML = '<div class="cargando">Cargando sesión</div>';
+      const { data: s, error } = await db.from("trainings").select("*").eq("id", id).single();
+      if (error || !s) { App.toast("No se encontró la sesión.", "error"); irA(null); return; }
+
+      const { data: previas } = await db.from("training_attendance")
+        .select("player_id, status_code, reason").eq("training_id", id);
+      const prev = {};
+      for (const a of (previas || [])) prev[a.player_id] = a;
+
+      // Estado local (por defecto presente)
+      const LISTA = {};
+      for (const p of PLAYERS) {
+        const a = prev[p.id];
+        LISTA[p.id] = { status: a ? a.status_code : "presente", reason: a ? (a.reason || "") : "" };
+      }
+
+      const opcEstado = ESTADOS.map(e => `<option value="${e.code}">${App.esc(e.label)}</option>`).join("");
+
+      function fila(p) {
+        const l = LISTA[p.id];
+        const info = estadoInfo(l.status);
+        return `
+          <div class="fila-asis" data-fila="${p.id}">
+            <span class="badge dorsal">${p.shirt_number ?? "—"}</span>
+            <span class="nom">${App.esc(p.name)}</span>
+            <select data-status="${p.id}">${opcEstado}</select>
+            <input type="text" data-reason="${p.id}" placeholder="Nota (opcional)" value="${App.esc(l.reason)}"
+              style="${info.counts_as_present ? "display:none" : ""}; flex:1; min-width:120px" />
+          </div>`;
+      }
+
+      $vista.innerHTML = `
+        <div class="card">
+          <div class="card-header">
+            <button class="btn pequeno" id="btn-volver">← Entrenamientos</button>
+            <button class="btn pequeno" id="btn-editar">Editar sesión</button>
+          </div>
+          <h2 style="margin-bottom:2px">Pasar lista</h2>
+          <p class="muted" style="margin-top:0; font-size:.9rem">
+            ${App.fechaBonita(s.session_date)} · ${focoLabel(s.focus)}${s.duration_min ? " · " + s.duration_min + "′" : ""}
+          </p>
+          <div class="acciones mt-2">
+            <button class="btn pequeno" id="btn-todos-pres">Todos presentes</button>
+          </div>
+          <div class="lista-asis mt-3" id="lista-asis">${PLAYERS.map(fila).join("")}</div>
+          <button class="btn primario bloque mt-3" id="btn-guardar-lista">Guardar lista</button>
+        </div>`;
+
+      // Preseleccionar estados
+      for (const p of PLAYERS) {
+        const sel = $vista.querySelector(`[data-status="${p.id}"]`);
+        if (sel) sel.value = LISTA[p.id].status;
+      }
+
+      document.getElementById("btn-volver").onclick = () => irA(null);
+      document.getElementById("btn-editar").onclick = () => formSesion(s);
+
+      $vista.querySelectorAll("[data-status]").forEach(sel => {
+        sel.addEventListener("change", () => {
+          const pid = sel.dataset.status;
+          LISTA[pid].status = sel.value;
+          const reasonInput = $vista.querySelector(`[data-reason="${pid}"]`);
+          reasonInput.style.display = estadoInfo(sel.value).counts_as_present ? "none" : "";
+        });
+      });
+      $vista.querySelectorAll("[data-reason]").forEach(inp => {
+        inp.addEventListener("input", () => { LISTA[inp.dataset.reason].reason = inp.value; });
+      });
+      document.getElementById("btn-todos-pres").onclick = () => {
+        for (const p of PLAYERS) {
+          LISTA[p.id].status = "presente";
+          const sel = $vista.querySelector(`[data-status="${p.id}"]`);
+          if (sel) sel.value = "presente";
+          $vista.querySelector(`[data-reason="${p.id}"]`).style.display = "none";
+        }
+        App.toast("Todos marcados presentes.", "ok");
+      };
+
+      document.getElementById("btn-guardar-lista").addEventListener("click", async () => {
+        const filas = PLAYERS.map(p => ({
+          training_id: id, player_id: p.id,
+          status_code: LISTA[p.id].status,
+          reason: estadoInfo(LISTA[p.id].status).counts_as_present ? null : (LISTA[p.id].reason.trim() || null),
+        }));
+        const btn = document.getElementById("btn-guardar-lista");
+        btn.disabled = true; btn.textContent = "Guardando…";
+        const { error } = await db.from("training_attendance").upsert(filas, { onConflict: "training_id,player_id" });
+        btn.disabled = false; btn.textContent = "Guardar lista";
+        if (error) { App.toast("Error al guardar la lista.", "error"); console.error(error); return; }
+        App.toast("Lista guardada.", "ok");
+        irA(null);
+      });
+    }
+
+    // ---- Arranque ----
+    router();
+  });
+  </script>
+</body>
+</html>

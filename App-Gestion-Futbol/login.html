@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Acceso — Gestión Fútbol</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* Login centrado, tarjeta única (mismo estilo que la app RPE) */
+    body { display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+    .login-card {
+      width: 100%; max-width: 380px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radio-lg);
+      padding: 28px 24px;
+      box-shadow: var(--shadow-card);
+    }
+    .login-marca { text-align: center; margin-bottom: 20px; }
+    .login-marca .escudo { width: 64px; height: 64px; margin: 0 auto 12px; }
+    .login-card h1 {
+      text-align: center; font-size: 1.35rem; margin: 0 0 4px;
+      text-transform: uppercase; font-style: italic; font-weight: 800; letter-spacing: .5px;
+    }
+    .login-card .sub { text-align: center; color: var(--muted); font-size: .88rem; margin: 0 0 8px; }
+  </style>
+</head>
+<body>
+  <form class="login-card" id="form-login" autocomplete="on">
+    <div class="login-marca">
+      <div class="escudo"><img src="escudo-icodense.png" alt="Escudo del club" /></div>
+      <h1>Gestión Fútbol</h1>
+      <p class="sub">Acceso del cuerpo técnico</p>
+    </div>
+
+    <label class="campo" for="email">Email</label>
+    <input id="email" type="email" inputmode="email" autocomplete="username" required />
+
+    <label class="campo" for="password">Contraseña</label>
+    <input id="password" type="password" autocomplete="current-password" required />
+
+    <button class="btn primario bloque" id="btn-login" type="submit" style="margin-top:22px">Entrar</button>
+    <p class="error-texto centro mt-3" id="aviso-login"></p>
+  </form>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script>
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const $form   = document.getElementById("form-login");
+    const $email  = document.getElementById("email");
+    const $pass   = document.getElementById("password");
+    const $btn    = document.getElementById("btn-login");
+    const $aviso  = document.getElementById("aviso-login");
+
+    // Si ya hay sesión, saltar directo a la app
+    (async () => {
+      const { data: { session } } = await db.auth.getSession();
+      if (session) window.location.replace("index.html");
+    })();
+
+    $form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      $btn.disabled = true;
+      $btn.textContent = "Entrando…";
+      $aviso.textContent = "";
+
+      const { error } = await db.auth.signInWithPassword({
+        email: $email.value.trim(),
+        password: $pass.value,
+      });
+
+      if (error) {
+        $btn.disabled = false;
+        $btn.textContent = "Entrar";
+        $aviso.textContent = "Email o contraseña incorrectos.";
+        console.error(error);
+        return;
+      }
+      window.location.replace("index.html");
+    });
+  </script>
+</body>
+</html>
