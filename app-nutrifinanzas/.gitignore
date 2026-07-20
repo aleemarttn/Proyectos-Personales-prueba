@@ -1,0 +1,10 @@
+node_modules
+dist
+.DS_Store
+*.local
+.vite
+
+# Variables de entorno (claves de Supabase, etc.) — NUNCA subir al repo
+.env
+.env.*
+!.env.example

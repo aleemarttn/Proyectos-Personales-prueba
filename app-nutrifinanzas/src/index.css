@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Fondo general fuera del "móvil" */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #e8eae6;
+  font-family: 'Nunito', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Quitamos el resaltado azul al tocar en móvil */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Animaciones reutilizables */
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.35s ease both;
+  }
+  .animate-slide-up {
+    animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .animate-pop {
+    animation: pop 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .animate-scan {
+    animation: scanLine 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pop {
+  0% { opacity: 0; transform: scale(0.8); }
+  60% { transform: scale(1.05); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes scanLine {
+  0% { top: 8%; }
+  50% { top: 88%; }
+  100% { top: 8%; }
+}
+
+/* Ocultar barra de scroll pero permitir scroll */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

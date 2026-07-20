@@ -1,0 +1,13 @@
+# Configuración para desplegar en Netlify.
+# Sirve tanto si subes la carpeta "dist" a mano como si conectas tu cuenta de GitHub.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Asegura que cualquier dirección interna (/gastos, /perfil, etc.) cargue la app
+# en lugar de dar un error "Página no encontrada" al recargar.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

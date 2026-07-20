@@ -1,0 +1,134 @@
+import { useState } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
+import { Leaf, Mail, Lock, ArrowRight, Loader2 } from 'lucide-react'
+import { useAuth, traducirErrorAuth } from '../context/AuthContext.jsx'
+
+// Pantalla de registro (email + contraseña).
+export default function Registro() {
+  const navigate = useNavigate()
+  const { registrar } = useAuth()
+
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [cargando, setCargando] = useState(false)
+  const [error, setError] = useState('')
+
+  async function enviar(e) {
+    e.preventDefault()
+    setError('')
+
+    if (password.length < 6) {
+      setError('La contraseña debe tener al menos 6 caracteres.')
+      return
+    }
+
+    setCargando(true)
+    try {
+      const sesion = await registrar(email.trim(), password)
+      if (sesion) {
+        // Usuario nuevo: aún no tiene perfil completo -> onboarding
+        navigate('/onboarding')
+      } else {
+        // Caso con confirmación de email activada (no es nuestro caso ahora)
+        setError('Te hemos enviado un correo para confirmar tu cuenta.')
+        setCargando(false)
+      }
+    } catch (err) {
+      setError(traducirErrorAuth(err))
+      setCargando(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col h-full bg-cream animate-fade-in px-7 py-10">
+      <div className="flex-1 flex flex-col justify-center">
+        <div className="w-16 h-16 rounded-2xl bg-brand-500 text-white flex items-center justify-center mb-6 animate-pop">
+          <Leaf size={32} strokeWidth={2.2} />
+        </div>
+
+        <h1 className="text-3xl font-black text-gray-800 mb-1">Crea tu cuenta</h1>
+        <p className="text-gray-500 mb-7">
+          Guarda tu despensa y tus gastos en la nube.
+        </p>
+
+        <form onSubmit={enviar} className="space-y-4">
+          <CampoAuth
+            icon={Mail}
+            type="email"
+            placeholder="tu@email.com"
+            value={email}
+            onChange={setEmail}
+            autoComplete="email"
+          />
+          <div>
+            <CampoAuth
+              icon={Lock}
+              type="password"
+              placeholder="Contraseña"
+              value={password}
+              onChange={setPassword}
+              autoComplete="new-password"
+            />
+            <p className="text-xs text-gray-400 mt-1.5 ml-1">
+              Mínimo 6 caracteres.
+            </p>
+          </div>
+
+          {error && (
+            <p className="bg-red-50 text-red-600 text-sm font-semibold rounded-xl px-4 py-3">
+              {error}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={cargando}
+            className="w-full bg-brand-500 text-white font-extrabold text-lg py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-soft disabled:opacity-70"
+          >
+            {cargando ? (
+              <>
+                <Loader2 size={20} className="animate-spin" /> Creando cuenta...
+              </>
+            ) : (
+              <>
+                Crear cuenta <ArrowRight size={20} />
+              </>
+            )}
+          </button>
+        </form>
+      </div>
+
+      <p className="text-center text-gray-500 font-semibold">
+        ¿Ya tienes cuenta?{' '}
+        <Link to="/login" className="text-brand-600 font-extrabold">
+          Inicia sesión
+        </Link>
+      </p>
+    </div>
+  )
+}
+
+// Campo de formulario con icono a la izquierda (reutilizado en Login).
+export function CampoAuth({
+  icon: Icon,
+  type,
+  placeholder,
+  value,
+  onChange,
+  autoComplete,
+}) {
+  return (
+    <div className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3.5 shadow-card focus-within:ring-2 ring-brand-300">
+      <Icon size={20} className="text-gray-400 shrink-0" />
+      <input
+        type={type}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        autoComplete={autoComplete}
+        required
+        className="flex-1 bg-transparent outline-none font-semibold text-gray-800 placeholder:text-gray-300 placeholder:font-normal"
+      />
+    </div>
+  )
+}
