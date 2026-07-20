@@ -27,30 +27,40 @@ export default function AnadirAlimento() {
 
   const [guardando, setGuardando] = useState(false)
   const [hecho, setHecho] = useState(false)
+  const [error, setError] = useState('')
 
   const valido = form.nombre.trim() && form.precio !== ''
+  // Si venimos del escáner (hay prefill con nombre), el origen es "escaner"
+  const origen = prefill.nombre ? 'escaner' : 'manual'
 
   function set(campo, valor) {
     setForm({ ...form, [campo]: valor })
   }
 
-  function guardar() {
+  async function guardar() {
     if (!valido) return
     setGuardando(true)
-    setTimeout(() => {
-      agregarAlimento({
-        nombre: form.nombre.trim(),
-        cantidad: form.cantidad || '1 ud',
-        kcal: Number(form.kcal) || 0,
-        precio: Number(form.precio) || 0,
-        supermercado: form.supermercado,
-        categoria: form.categoria,
-      })
-      setGuardando(false)
+    setError('')
+    try {
+      await agregarAlimento(
+        {
+          nombre: form.nombre.trim(),
+          cantidad: form.cantidad || '1 ud',
+          kcal: Number(form.kcal) || 0,
+          precio: Number(form.precio) || 0,
+          supermercado: form.supermercado,
+          categoria: form.categoria,
+        },
+        origen
+      )
       setHecho(true)
       // Mostramos la confirmación un momento y volvemos a la despensa
       setTimeout(() => navigate('/despensa'), 1000)
-    }, 600)
+    } catch (e) {
+      console.error('Error guardando el alimento:', e)
+      setError('No se pudo guardar. Inténtalo de nuevo.')
+      setGuardando(false)
+    }
   }
 
   // Pantalla de confirmación tras guardar
@@ -134,6 +144,12 @@ export default function AnadirAlimento() {
           opciones={CATEGORIAS.map((c) => c.id)}
           onChange={(v) => set('categoria', v)}
         />
+
+        {error && (
+          <p className="bg-red-50 text-red-600 text-sm font-semibold rounded-xl px-4 py-3 mt-3">
+            {error}
+          </p>
+        )}
 
         <button
           onClick={guardar}

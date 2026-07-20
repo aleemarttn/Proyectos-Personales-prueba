@@ -120,7 +120,7 @@ http://localhost:5173
    - **Control total:** datos + objetivos de calorías y macros (ej. 2000 kcal,
      50% hidratos / 30% proteínas / 20% grasas).
    - **Sencilla:** solo nombre, edad, género y código postal (sin macros).
-4. **Despensa:** lista de alimentos españoles ya cargados. Puedes:
+4. **Despensa:** empieza vacía (cada cuenta tiene la suya). Puedes:
    - **Añadir** un alimento a mano.
    - **Escanear** un ticket (simulado: sale una "cámara", un spinner de ~1,5s
      y rellena solo un producto de ejemplo).
@@ -131,10 +131,9 @@ http://localhost:5173
 7. **Perfil:** muestra tus datos y, si elegiste "Control total", tus macros.
    Abajo hay un botón **"Cerrar sesión"**.
 
-> **Tu cuenta y tu perfil se guardan en la nube** (Supabase): puedes cerrar
-> sesión y volver a entrar desde cualquier sitio y seguirán ahí. (Los alimentos
-> de la despensa todavía se guardan solo en este navegador; migrarán a la nube
-> en el siguiente bloque de desarrollo.)
+> **Tu cuenta, tu perfil y tu despensa se guardan en la nube** (Supabase):
+> puedes cerrar sesión y volver a entrar desde cualquier sitio y todo seguirá
+> ahí.
 
 ---
 
@@ -158,10 +157,9 @@ http://localhost:5173
 - **recharts** para los gráficos (tarta y barras)
 - **lucide-react** para los iconos
 - **Supabase** (`@supabase/supabase-js`) para autenticación y base de datos.
-  Cliente en `src/lib/supabase.js`; sesión y perfil en `src/context/AuthContext.jsx`.
+  Cliente en `src/lib/supabase.js`; sesión y perfil en `src/context/AuthContext.jsx`;
+  alimentos (despensa) en `src/context/AppContext.jsx`.
   Esquema SQL en `supabase/schema.sql`. Claves en `.env` (ver `.env.example`).
-- Los alimentos aún se guardan en **localStorage** (`src/context/AppContext.jsx`);
-  migrarán a Supabase en el siguiente bloque.
 - El escáner de tickets (OCR) y las recetas con IA **todavía son simulados**.
 
 Estructura de carpetas:
@@ -176,7 +174,7 @@ app-nutrifinanzas/
 │   ├── lib/                (cliente de Supabase)
 │   ├── context/            (AuthContext = sesión+perfil; AppContext = alimentos)
 │   ├── components/         (carcasa de móvil y barra inferior)
-│   ├── data/               (alimentos y tickets simulados)
+│   ├── data/               (categorías, supermercados y tickets simulados)
 │   ├── utils/              (formato de euros y fechas)
 │   └── pages/              (las pantallas: Bienvenida, Login, Registro,
 │                            Onboarding, Despensa, AñadirAlimento, Escanear,

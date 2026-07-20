@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Plus, ScanLine, Trash2, Flame } from 'lucide-react'
+import { Plus, ScanLine, Trash2, Flame, Loader2 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { colorCategoria } from '../data/categorias.js'
@@ -8,10 +8,18 @@ import { euros } from '../utils/formato.js'
 // Pantalla principal: la despensa con todos los alimentos.
 export default function Despensa() {
   const navigate = useNavigate()
-  const { alimentos, eliminarAlimento } = useApp()
+  const { alimentos, cargando, error, eliminarAlimento } = useApp()
   const { perfil } = useAuth()
 
   const esControlTotal = perfil?.tipo === 'total'
+
+  async function eliminar(id) {
+    try {
+      await eliminarAlimento(id)
+    } catch (e) {
+      console.error('Error eliminando el alimento:', e)
+    }
+  }
 
   return (
     <div className="bg-cream min-h-full animate-fade-in">
@@ -47,9 +55,23 @@ export default function Despensa() {
         </span>
       </div>
 
+      {error && (
+        <div className="px-5 mb-3">
+          <p className="bg-red-50 text-red-600 text-sm font-semibold rounded-xl px-4 py-3">
+            {error}
+          </p>
+        </div>
+      )}
+
       {/* Lista de alimentos */}
       <div className="px-5 pb-6 space-y-3">
-        {alimentos.length === 0 && (
+        {cargando && (
+          <div className="flex justify-center py-16">
+            <Loader2 className="animate-spin text-brand-400" size={28} />
+          </div>
+        )}
+
+        {!cargando && alimentos.length === 0 && (
           <div className="text-center text-gray-400 py-16">
             <p className="font-semibold">Tu despensa está vacía.</p>
             <p className="text-sm">Añade o escanea tu primer alimento.</p>
@@ -94,7 +116,7 @@ export default function Despensa() {
                 {euros(a.precio)}
               </div>
               <button
-                onClick={() => eliminarAlimento(a.id)}
+                onClick={() => eliminar(a.id)}
                 className="text-gray-300 hover:text-red-500 active:scale-90 transition mt-1"
                 aria-label="Eliminar"
               >
