@@ -12,6 +12,7 @@ import Onboarding from './pages/Onboarding.jsx'
 import Despensa from './pages/Despensa.jsx'
 import AnadirAlimento from './pages/AnadirAlimento.jsx'
 import Escanear from './pages/Escanear.jsx'
+import ConfirmarEscaneo from './pages/ConfirmarEscaneo.jsx'
 import Gastos from './pages/Gastos.jsx'
 import Recetas from './pages/Recetas.jsx'
 import Perfil from './pages/Perfil.jsx'
@@ -24,7 +25,7 @@ export default function App() {
   const perfilCompleto = !!perfil?.tipo
 
   // Rutas que NO llevan barra de navegación inferior
-  const sinBarra = ['/', '/login', '/registro', '/onboarding', '/escanear']
+  const sinBarra = ['/', '/login', '/registro', '/onboarding', '/escanear', '/confirmar-escaneo']
   const mostrarBarra =
     sesion && perfilCompleto && !sinBarra.includes(location.pathname)
 
@@ -66,6 +67,10 @@ export default function App() {
           <Route path="/despensa" element={<Protegida><Despensa /></Protegida>} />
           <Route path="/anadir" element={<Protegida><AnadirAlimento /></Protegida>} />
           <Route path="/escanear" element={<Protegida><Escanear /></Protegida>} />
+          <Route
+            path="/confirmar-escaneo"
+            element={<Protegida><ConfirmarEscaneo /></Protegida>}
+          />
           <Route path="/gastos" element={<Protegida><Gastos /></Protegida>} />
           <Route path="/recetas" element={<Protegida><Recetas /></Protegida>} />
           <Route path="/perfil" element={<Protegida><Perfil /></Protegida>} />

@@ -14,6 +14,7 @@ function filaAAlimento(fila) {
   return {
     id: fila.id,
     nombre: fila.nombre,
+    marca: fila.marca,
     cantidad: fila.cantidad,
     kcal: fila.kcal,
     precio: Number(fila.precio),
@@ -69,6 +70,7 @@ export function AppProvider({ children }) {
     const fila = {
       usuario_id: sesion.user.id,
       nombre: alimento.nombre,
+      marca: alimento.marca || null,
       cantidad: alimento.cantidad,
       kcal: alimento.kcal,
       precio: alimento.precio,

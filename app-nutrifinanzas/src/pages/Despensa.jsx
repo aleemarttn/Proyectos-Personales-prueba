@@ -95,7 +95,10 @@ export default function Despensa() {
             </div>
 
             <div className="flex-1 min-w-0">
-              <h3 className="font-bold text-gray-800 truncate">{a.nombre}</h3>
+              <h3 className="font-bold text-gray-800 truncate">
+                {a.nombre}
+                {a.marca && <span className="text-gray-400 font-semibold"> · {a.marca}</span>}
+              </h3>
               <div className="flex items-center gap-2 text-xs text-gray-400 font-semibold mt-0.5">
                 <span>{a.cantidad}</span>
                 <span>·</span>

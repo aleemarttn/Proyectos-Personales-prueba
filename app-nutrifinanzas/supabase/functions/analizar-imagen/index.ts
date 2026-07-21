@@ -1,0 +1,179 @@
+// Edge Function: analiza una foto de ticket o de producto suelto con
+// Gemini (tier gratuito) y devuelve los alimentos detectados en JSON.
+// La clave GEMINI_API_KEY se lee como secreto de Supabase, nunca del frontend.
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest'
+const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')
+
+const CATEGORIAS_VALIDAS = [
+  'Proteínas',
+  'Hidratos',
+  'Grasas',
+  'Verduras',
+  'Fruta',
+  'Lácteos',
+  'Otros',
+]
+
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: CORS_HEADERS })
+  }
+
+  try {
+    // Solo usuarios autenticados de la app pueden usar el analizador
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      return jsonError('No autorizado', 401)
+    }
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: authHeader } } }
+    )
+    const { data: userData, error: userErr } = await supabase.auth.getUser()
+    if (userErr || !userData?.user) {
+      return jsonError('No autorizado', 401)
+    }
+
+    if (!GEMINI_API_KEY) {
+      return jsonError('El servidor no tiene configurada la clave de Gemini.', 500)
+    }
+
+    const { modo, imagenBase64, mimeType } = await req.json()
+    if (!modo || !imagenBase64) {
+      return jsonError('Faltan datos: modo o imagenBase64.', 400)
+    }
+    if (modo !== 'ticket' && modo !== 'producto') {
+      return jsonError('modo debe ser "ticket" o "producto".', 400)
+    }
+
+    const prompt = construirPrompt(modo)
+    const resultado = await llamarGemini(prompt, imagenBase64, mimeType || 'image/jpeg')
+
+    return new Response(JSON.stringify(resultado), {
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    })
+  } catch (e) {
+    console.error('Error en analizar-imagen:', e)
+    return jsonError('No se pudo analizar la imagen.', 500)
+  }
+})
+
+function jsonError(mensaje: string, status: number) {
+  return new Response(JSON.stringify({ error: mensaje }), {
+    status,
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+  })
+}
+
+function construirPrompt(modo: 'ticket' | 'producto') {
+  const listaCategorias = CATEGORIAS_VALIDAS.join(', ')
+
+  if (modo === 'ticket') {
+    return `Eres un asistente que analiza fotos de tickets de compra de supermercados españoles.
+Analiza la imagen y devuelve SOLO un JSON (sin markdown, sin texto adicional) con esta forma exacta:
+
+{
+  "supermercado": "nombre del supermercado o null si no se ve",
+  "items": [
+    {
+      "nombre": "nombre del producto, normalizado y legible (ej. 'Leche semidesnatada' en vez de 'LCH SEMI 1L')",
+      "marca": "marca si se puede inferir del texto del ticket, o null si no aparece",
+      "precio": numero_decimal_o_null,
+      "categoria_sugerida": "una de estas categorías EXACTAS: ${listaCategorias}"
+    }
+  ]
+}
+
+Ignora líneas que no sean productos (totales, IVA, descuentos, cambio, forma de pago).
+Si no puedes leer bien un precio, pon null en vez de inventarlo.
+Responde ÚNICAMENTE con el JSON, nada más.`
+  }
+
+  return `Eres un asistente que analiza fotos de productos de alimentación sueltos (envases, packaging).
+Analiza la imagen y devuelve SOLO un JSON (sin markdown, sin texto adicional) con esta forma exacta:
+
+{
+  "supermercado": null,
+  "items": [
+    {
+      "nombre": "nombre del producto tal y como aparece en el envase",
+      "marca": "marca del producto tal y como aparece en el envase, o null si no se distingue",
+      "precio": null,
+      "categoria_sugerida": "una de estas categorías EXACTAS: ${listaCategorias}"
+    }
+  ]
+}
+
+El precio siempre debe ser null: esta foto no incluye ticket ni precio, el usuario lo rellenará a mano.
+Si en la imagen hay varios productos distintos, incluye uno por cada uno.
+Responde ÚNICAMENTE con el JSON, nada más.`
+}
+
+async function llamarGemini(prompt: string, imagenBase64: string, mimeType: string) {
+  const base64Limpio = imagenBase64.includes(',')
+    ? imagenBase64.split(',')[1]
+    : imagenBase64
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`
+
+  const respuesta = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [
+            { text: prompt },
+            { inline_data: { mime_type: mimeType, data: base64Limpio } },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.2,
+        responseMimeType: 'application/json',
+      },
+    }),
+  })
+
+  if (!respuesta.ok) {
+    const texto = await respuesta.text()
+    throw new Error(`Gemini respondió ${respuesta.status}: ${texto}`)
+  }
+
+  const datos = await respuesta.json()
+  const texto = datos.candidates?.[0]?.content?.parts?.[0]?.text
+  if (!texto) throw new Error('Gemini no devolvió contenido analizable.')
+
+  const json = extraerJson(texto)
+  return normalizarResultado(json)
+}
+
+// Por si el modelo envuelve el JSON en ```json ... ``` a pesar de pedirlo limpio
+function extraerJson(texto: string) {
+  const limpio = texto.trim().replace(/^```json\s*/i, '').replace(/```$/, '').trim()
+  return JSON.parse(limpio)
+}
+
+function normalizarResultado(json: any) {
+  const items = Array.isArray(json?.items) ? json.items : []
+  return {
+    supermercado: json?.supermercado ?? null,
+    items: items.map((it: any) => ({
+      nombre: String(it?.nombre || '').trim(),
+      marca: it?.marca ? String(it.marca).trim() : null,
+      precio: typeof it?.precio === 'number' ? it.precio : null,
+      categoria_sugerida: CATEGORIAS_VALIDAS.includes(it?.categoria_sugerida)
+        ? it.categoria_sugerida
+        : 'Otros',
+    })).filter((it: any) => it.nombre),
+  }
+}

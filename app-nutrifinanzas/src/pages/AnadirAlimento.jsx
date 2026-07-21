@@ -18,6 +18,7 @@ export default function AnadirAlimento() {
 
   const [form, setForm] = useState({
     nombre: prefill.nombre || '',
+    marca: prefill.marca || '',
     cantidad: prefill.cantidad || '',
     kcal: prefill.kcal || '',
     precio: prefill.precio || '',
@@ -45,6 +46,7 @@ export default function AnadirAlimento() {
       await agregarAlimento(
         {
           nombre: form.nombre.trim(),
+          marca: form.marca.trim() || null,
           cantidad: form.cantidad || '1 ud',
           kcal: Number(form.kcal) || 0,
           precio: Number(form.precio) || 0,
@@ -103,6 +105,12 @@ export default function AnadirAlimento() {
           valor={form.nombre}
           onChange={(v) => set('nombre', v)}
           placeholder="Ej. Pechuga de pollo"
+        />
+        <Campo
+          label="Marca (opcional)"
+          valor={form.marca}
+          onChange={(v) => set('marca', v)}
+          placeholder="Ej. Danone, Pascual"
         />
         <Campo
           label="Cantidad"
