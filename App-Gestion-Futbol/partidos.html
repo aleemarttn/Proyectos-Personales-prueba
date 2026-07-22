@@ -160,8 +160,12 @@
     async function router() {
       await cargarCatalogos();
       const id = matchIdActual();
-      if (id) renderDetalle(id);
-      else renderLista();
+      if (id) { await renderDetalle(id); return; }
+      await renderLista();
+      if (new URLSearchParams(location.search).get("nuevo")) {
+        history.replaceState({}, "", "partidos.html");
+        formPartido();
+      }
     }
 
     // ===================================================================

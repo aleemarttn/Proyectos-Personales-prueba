@@ -131,6 +131,15 @@
       ? `<div class="lista-nombres">${arr.map(x => `<span class="badge ${cls}">${App.esc(getName(x))}</span>`).join("")}</div>`
       : '<p class="muted" style="margin:6px 0 0; font-size:.85rem">Ninguno.</p>';
 
+    const cardAcciones = `
+      <div class="card ancho">
+        <h3>Acciones rápidas</h3>
+        <div class="acciones">
+          <button class="btn primario" id="btn-add-entreno">+ Añadir entrenamiento</button>
+          <button class="btn primario" id="btn-add-partido">+ Añadir partido</button>
+        </div>
+      </div>`;
+
     const cardProximo = proximo ? `
       <div class="card prox-partido">
         <h3>Próximo partido</h3>
@@ -240,8 +249,31 @@
       </div>`;
 
     $dash.innerHTML = `<div class="dash">
-      ${cardProximo}${cardBalance}${cardRacha}${cardDisponibilidad}${cardSancion}${cardAsistencia}${cardSinCerrar}${cardCalendario}
+      ${cardAcciones}${cardProximo}${cardBalance}${cardRacha}${cardDisponibilidad}${cardSancion}${cardAsistencia}${cardSinCerrar}${cardCalendario}
     </div>`;
+
+    document.getElementById("btn-add-entreno").onclick = async (ev) => {
+      const btn = ev.currentTarget;
+      btn.disabled = true;
+      const existente = trainings.find(t => t.session_date === hoy);
+      if (existente) { location.href = `entrenamientos.html?id=${existente.id}`; return; }
+      const { data, error } = await db.from("trainings")
+        .insert({ team_id: tid, session_date: hoy }).select("id").single();
+      if (error) {
+        if (error.message.includes("trainings_team_id_session_date")) {
+          const { data: ses } = await db.from("trainings").select("id")
+            .eq("team_id", tid).eq("session_date", hoy).single();
+          if (ses) { location.href = `entrenamientos.html?id=${ses.id}`; return; }
+        }
+        App.toast("No se pudo crear el entrenamiento de hoy.", "error");
+        btn.disabled = false;
+        return;
+      }
+      location.href = `entrenamientos.html?id=${data.id}`;
+    };
+    document.getElementById("btn-add-partido").onclick = () => {
+      location.href = "partidos.html?nuevo=1";
+    };
   });
   </script>
 </body>
