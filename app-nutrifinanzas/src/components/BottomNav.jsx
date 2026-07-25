@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom'
-import { Package, PieChart, ChefHat, User } from 'lucide-react'
+import { Package, UtensilsCrossed, PieChart, ChefHat, User } from 'lucide-react'
 
 // Barra de navegación inferior, estilo app de móvil.
 const items = [
   { to: '/despensa', icon: Package, label: 'Despensa' },
+  { to: '/diario', icon: UtensilsCrossed, label: 'Diario' },
   { to: '/gastos', icon: PieChart, label: 'Gastos' },
   { to: '/recetas', icon: ChefHat, label: 'Recetas' },
   { to: '/perfil', icon: User, label: 'Perfil' },

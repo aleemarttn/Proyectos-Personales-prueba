@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, ScanLine, Trash2, Flame, Loader2 } from 'lucide-react'
+import { Plus, ScanLine, Trash2, Flame, Loader2, ChevronRight } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { colorCategoria } from '../data/categorias.js'
 import { euros } from '../utils/formato.js'
+import DetalleAlimento from '../components/DetalleAlimento.jsx'
 
 // Pantalla principal: la despensa con todos los alimentos.
 export default function Despensa() {
@@ -11,7 +13,9 @@ export default function Despensa() {
   const { alimentos, cargando, error, eliminarAlimento } = useApp()
   const { perfil } = useAuth()
 
-  const esControlTotal = perfil?.tipo === 'total'
+  // id del alimento cuya ficha está abierta (o null)
+  const [detalleId, setDetalleId] = useState(null)
+  const alimentoDetalle = alimentos.find((a) => a.id === detalleId) || null
 
   async function eliminar(id) {
     try {
@@ -81,7 +85,11 @@ export default function Despensa() {
         {alimentos.map((a) => (
           <div
             key={a.id}
-            className="bg-white rounded-2xl p-4 shadow-card flex items-center gap-3 animate-slide-up"
+            onClick={() => setDetalleId(a.id)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && setDetalleId(a.id)}
+            className="bg-white rounded-2xl p-4 shadow-card flex items-center gap-3 animate-slide-up cursor-pointer active:scale-[0.99] transition"
           >
             {/* Punto de color de la categoría */}
             <div
@@ -103,7 +111,7 @@ export default function Despensa() {
                 <span>{a.cantidad}</span>
                 <span>·</span>
                 <span>{a.supermercado}</span>
-                {esControlTotal && (
+                {!!a.kcal && (
                   <>
                     <span>·</span>
                     <span className="flex items-center gap-0.5">
@@ -112,23 +120,61 @@ export default function Despensa() {
                   </>
                 )}
               </div>
+              {tieneMacros(a) && (
+                <div className="flex items-center gap-1.5 mt-1">
+                  {a.proteinas != null && <Macro label="P" valor={a.proteinas} color="#ef4444" />}
+                  {a.hidratos != null && <Macro label="H" valor={a.hidratos} color="#f59e0b" />}
+                  {a.grasas != null && <Macro label="G" valor={a.grasas} color="#eab308" />}
+                  <span className="text-[10px] text-gray-300 font-semibold">/100g</span>
+                </div>
+              )}
             </div>
 
-            <div className="text-right shrink-0">
-              <div className="font-extrabold text-gray-800">
-                {euros(a.precio)}
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="text-right">
+                <div className="font-extrabold text-gray-800">
+                  {euros(a.precio)}
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    eliminar(a.id)
+                  }}
+                  className="text-gray-300 hover:text-red-500 active:scale-90 transition mt-1"
+                  aria-label="Eliminar"
+                >
+                  <Trash2 size={16} />
+                </button>
               </div>
-              <button
-                onClick={() => eliminar(a.id)}
-                className="text-gray-300 hover:text-red-500 active:scale-90 transition mt-1"
-                aria-label="Eliminar"
-              >
-                <Trash2 size={16} />
-              </button>
+              <ChevronRight size={18} className="text-gray-300" />
             </div>
           </div>
         ))}
       </div>
+
+      {alimentoDetalle && (
+        <DetalleAlimento
+          alimento={alimentoDetalle}
+          onCerrar={() => setDetalleId(null)}
+        />
+      )}
     </div>
+  )
+}
+
+// ¿El alimento tiene algún macro (proteínas/hidratos/grasas) registrado?
+function tieneMacros(a) {
+  return a.proteinas != null || a.hidratos != null || a.grasas != null
+}
+
+// Etiqueta compacta de un macro: P/H/G + gramos, con color de la categoría macro.
+function Macro({ label, valor, color }) {
+  return (
+    <span
+      className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
+      style={{ backgroundColor: color + '1f', color }}
+    >
+      {label} {valor}g
+    </span>
   )
 }

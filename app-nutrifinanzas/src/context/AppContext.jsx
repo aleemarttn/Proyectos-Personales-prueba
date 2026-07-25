@@ -17,11 +17,16 @@ function filaAAlimento(fila) {
     marca: fila.marca,
     cantidad: fila.cantidad,
     kcal: fila.kcal,
+    // Macros por 100 g/ml (numeric -> Supabase los devuelve como string o null)
+    proteinas: fila.proteinas === null ? null : Number(fila.proteinas),
+    hidratos: fila.hidratos === null ? null : Number(fila.hidratos),
+    grasas: fila.grasas === null ? null : Number(fila.grasas),
     precio: Number(fila.precio),
     supermercado: fila.supermercado,
     categoria: fila.categoria,
     fecha: fila.fecha,
     origen: fila.origen,
+    codigoBarras: fila.codigo_barras,
   }
 }
 
@@ -73,10 +78,14 @@ export function AppProvider({ children }) {
       marca: alimento.marca || null,
       cantidad: alimento.cantidad,
       kcal: alimento.kcal,
+      proteinas: alimento.proteinas ?? null,
+      hidratos: alimento.hidratos ?? null,
+      grasas: alimento.grasas ?? null,
       precio: alimento.precio,
       supermercado: alimento.supermercado,
       categoria: alimento.categoria,
       origen,
+      codigo_barras: alimento.codigoBarras || null,
     }
 
     const { data, error: err } = await supabase
@@ -92,6 +101,30 @@ export function AppProvider({ children }) {
     return nuevo
   }
 
+  // Actualiza campos de un alimento existente (p.ej. los macros).
+  // `cambios` usa las claves de las pantallas (kcal, proteinas, hidratos, grasas…).
+  async function actualizarAlimento(id, cambios) {
+    // Solo mandamos a la BD las columnas que de verdad vienen en `cambios`
+    const columnas = ['kcal', 'proteinas', 'hidratos', 'grasas', 'nombre', 'marca', 'cantidad', 'precio', 'supermercado', 'categoria']
+    const fila = {}
+    for (const c of columnas) {
+      if (c in cambios) fila[c] = cambios[c]
+    }
+
+    const { data, error: err } = await supabase
+      .from('alimentos')
+      .update(fila)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (err) throw err
+
+    const actualizado = filaAAlimento(data)
+    setAlimentos((prev) => prev.map((a) => (a.id === id ? actualizado : a)))
+    return actualizado
+  }
+
   async function eliminarAlimento(id) {
     const { error: err } = await supabase.from('alimentos').delete().eq('id', id)
     if (err) throw err
@@ -103,6 +136,7 @@ export function AppProvider({ children }) {
     cargando,
     error,
     agregarAlimento,
+    actualizarAlimento,
     eliminarAlimento,
   }
 

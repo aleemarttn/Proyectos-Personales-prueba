@@ -14,3 +14,10 @@ export function fechaCorta(iso) {
   const d = new Date(iso)
   return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
 }
+
+// timestamptz -> "14:32"
+export function horaCorta(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+}

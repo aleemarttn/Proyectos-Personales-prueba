@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeft, Check, Loader2, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Check, Loader2, CheckCircle2, ScanLine } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { useAuth } from '../context/AuthContext.jsx'
 import { CATEGORIAS, SUPERMERCADOS } from '../data/categorias.js'
+import EscanerNutricional from '../components/EscanerNutricional.jsx'
 
 // Formulario para añadir un alimento. Si venimos del escáner, llega
 // con datos ya rellenados (location.state.prefill).
@@ -11,16 +11,17 @@ export default function AnadirAlimento() {
   const navigate = useNavigate()
   const location = useLocation()
   const { agregarAlimento } = useApp()
-  const { perfil } = useAuth()
 
   const prefill = location.state?.prefill || {}
-  const esControlTotal = perfil?.tipo === 'total'
 
   const [form, setForm] = useState({
     nombre: prefill.nombre || '',
     marca: prefill.marca || '',
     cantidad: prefill.cantidad || '',
     kcal: prefill.kcal || '',
+    proteinas: prefill.proteinas ?? '',
+    hidratos: prefill.hidratos ?? '',
+    grasas: prefill.grasas ?? '',
     precio: prefill.precio || '',
     supermercado: prefill.supermercado || 'Mercadona',
     categoria: prefill.categoria || 'Otros',
@@ -29,6 +30,8 @@ export default function AnadirAlimento() {
   const [guardando, setGuardando] = useState(false)
   const [hecho, setHecho] = useState(false)
   const [error, setError] = useState('')
+  const [mostrarEscaner, setMostrarEscaner] = useState(false)
+  const [avisoMacros, setAvisoMacros] = useState('')
 
   const valido = form.nombre.trim() && form.precio !== ''
   // Si venimos del escáner (hay prefill con nombre), el origen es "escaner"
@@ -36,6 +39,26 @@ export default function AnadirAlimento() {
 
   function set(campo, valor) {
     setForm({ ...form, [campo]: valor })
+  }
+
+  // Convierte '' -> null y texto -> número (para las columnas numéricas)
+  function aNumero(v) {
+    if (v === '' || v === null || v === undefined) return null
+    const n = Number(String(v).replace(',', '.'))
+    return Number.isFinite(n) ? n : null
+  }
+
+  // Recibe los macros leídos de la etiqueta y rellena el formulario.
+  function macrosDetectados(nutricion) {
+    setForm((f) => ({
+      ...f,
+      kcal: nutricion.kcal ?? f.kcal,
+      proteinas: nutricion.proteinas ?? f.proteinas,
+      hidratos: nutricion.hidratos ?? f.hidratos,
+      grasas: nutricion.grasas ?? f.grasas,
+    }))
+    setMostrarEscaner(false)
+    setAvisoMacros('Macros rellenados desde la etiqueta. Revísalos antes de guardar.')
   }
 
   async function guardar() {
@@ -49,6 +72,9 @@ export default function AnadirAlimento() {
           marca: form.marca.trim() || null,
           cantidad: form.cantidad || '1 ud',
           kcal: Number(form.kcal) || 0,
+          proteinas: aNumero(form.proteinas),
+          hidratos: aNumero(form.hidratos),
+          grasas: aNumero(form.grasas),
           precio: Number(form.precio) || 0,
           supermercado: form.supermercado,
           categoria: form.categoria,
@@ -119,25 +145,68 @@ export default function AnadirAlimento() {
           placeholder="Ej. 1 kg, 500 g, 12 ud"
         />
 
-        <div className="grid grid-cols-2 gap-3">
-          <Campo
-            label="Precio (€)"
-            tipo="number"
-            valor={form.precio}
-            onChange={(v) => set('precio', v)}
-            placeholder="5,80"
-          />
-          {esControlTotal ? (
-            <Campo
-              label="kcal / 100g"
-              tipo="number"
-              valor={form.kcal}
-              onChange={(v) => set('kcal', v)}
-              placeholder="110"
-            />
-          ) : (
-            <div />
-          )}
+        <Campo
+          label="Precio (€)"
+          tipo="number"
+          valor={form.precio}
+          onChange={(v) => set('precio', v)}
+          placeholder="5,80"
+        />
+
+        <div className="bg-white rounded-2xl p-4 shadow-card mt-3">
+            <div className="flex items-center justify-between mb-1">
+              <div>
+                <p className="font-bold text-gray-800">Información nutricional</p>
+                <p className="text-xs text-gray-400 font-semibold">Valores por 100 g / 100 ml</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAvisoMacros('')
+                  setMostrarEscaner(true)
+                }}
+                className="bg-brand-500 text-white text-sm font-bold px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 active:scale-95 transition shrink-0"
+              >
+                <ScanLine size={16} /> Escanear etiqueta
+              </button>
+            </div>
+
+            {avisoMacros && (
+              <p className="bg-brand-50 text-brand-700 text-xs font-bold rounded-lg px-3 py-2 my-2 flex items-center gap-1.5">
+                <Check size={14} /> {avisoMacros}
+              </p>
+            )}
+
+            <div className="grid grid-cols-2 gap-3 mt-1">
+              <Campo
+                label="kcal"
+                tipo="number"
+                valor={form.kcal}
+                onChange={(v) => set('kcal', v)}
+                placeholder="110"
+              />
+              <Campo
+                label="Proteínas (g)"
+                tipo="number"
+                valor={form.proteinas}
+                onChange={(v) => set('proteinas', v)}
+                placeholder="20"
+              />
+              <Campo
+                label="Hidratos (g)"
+                tipo="number"
+                valor={form.hidratos}
+                onChange={(v) => set('hidratos', v)}
+                placeholder="0"
+              />
+              <Campo
+                label="Grasas (g)"
+                tipo="number"
+                valor={form.grasas}
+                onChange={(v) => set('grasas', v)}
+                placeholder="1,5"
+              />
+            </div>
         </div>
 
         <Selector
@@ -175,6 +244,13 @@ export default function AnadirAlimento() {
           )}
         </button>
       </div>
+
+      {mostrarEscaner && (
+        <EscanerNutricional
+          onCerrar={() => setMostrarEscaner(false)}
+          onDetectado={macrosDetectados}
+        />
+      )}
     </div>
   )
 }

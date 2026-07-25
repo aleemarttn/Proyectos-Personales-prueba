@@ -10,6 +10,8 @@ import Login from './pages/Login.jsx'
 import Registro from './pages/Registro.jsx'
 import Onboarding from './pages/Onboarding.jsx'
 import Despensa from './pages/Despensa.jsx'
+import Diario from './pages/Diario.jsx'
+import RegistrarComida from './pages/RegistrarComida.jsx'
 import AnadirAlimento from './pages/AnadirAlimento.jsx'
 import Escanear from './pages/Escanear.jsx'
 import ConfirmarEscaneo from './pages/ConfirmarEscaneo.jsx'
@@ -65,6 +67,8 @@ export default function App() {
 
           {/* Requieren sesión + perfil completo */}
           <Route path="/despensa" element={<Protegida><Despensa /></Protegida>} />
+          <Route path="/diario" element={<Protegida><Diario /></Protegida>} />
+          <Route path="/diario/registrar" element={<Protegida><RegistrarComida /></Protegida>} />
           <Route path="/anadir" element={<Protegida><AnadirAlimento /></Protegida>} />
           <Route path="/escanear" element={<Protegida><Escanear /></Protegida>} />
           <Route

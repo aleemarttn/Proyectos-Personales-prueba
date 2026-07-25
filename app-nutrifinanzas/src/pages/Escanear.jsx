@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   X,
@@ -8,65 +8,53 @@ import {
   Sparkles,
   Receipt,
   Package,
+  ScanBarcode,
   Loader2,
   AlertTriangle,
 } from 'lucide-react'
 import { analizarImagen } from '../lib/ocr.js'
+import { comprimirImagen } from '../utils/imagen.js'
+import { decodificarCodigoBarras } from '../lib/barcode.js'
+import { buscarProductoPorCodigoBarras } from '../lib/productos.js'
 
 // Escáner real: selector de modo (ticket o producto suelto), captura con
-// cámara o galería, previsualización, y análisis con IA (Gemini, vía Edge
-// Function). Si el análisis falla, cae al formulario manual (Bloque 4).
+// la CÁMARA NATIVA del sistema o galería, previsualización, y análisis con
+// IA (Gemini, vía Edge Function). Si el análisis falla, cae al formulario
+// manual (Bloque 4).
+//
+// La foto se toma con la cámara nativa (input file capture="environment"),
+// no con una vista de cámara en vivo (getUserMedia): Safari/iOS no da
+// autoenfoque fiable en getUserMedia, y para leer texto pequeño (ticket,
+// etiqueta) hace falta el enfoque de la app de cámara nativa.
 export default function Escanear() {
   const navigate = useNavigate()
-  const [modo, setModo] = useState(null) // null | 'ticket' | 'producto'
+  const [modo, setModo] = useState(null) // null | 'ticket' | 'producto' | 'codigo_barras'
   const [imagen, setImagen] = useState(null) // dataURL de la foto capturada/subida
+  const [mimeType, setMimeType] = useState('image/jpeg')
   const [analizando, setAnalizando] = useState(false)
   const [errorAnalisis, setErrorAnalisis] = useState('')
+  // Código de barras leído que no estaba en el catálogo compartido: se
+  // adjunta al producto una vez identificado por foto, para poder guardarlo
+  // en el catálogo al confirmar (Bloque "Fase 3").
+  const [codigoBarrasPendiente, setCodigoBarrasPendiente] = useState(null)
+  const [avisoCodigoNuevo, setAvisoCodigoNuevo] = useState(false)
 
-  const videoRef = useRef(null)
-  const streamRef = useRef(null)
-  const fileInputRef = useRef(null)
+  const camaraRef = useRef(null)
+  const galeriaRef = useRef(null)
 
-  const pararCamara = useCallback(() => {
-    streamRef.current?.getTracks().forEach((t) => t.stop())
-    streamRef.current = null
-  }, [])
-
-  const iniciarCamara = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
-      })
-      streamRef.current = stream
-      if (videoRef.current) videoRef.current.srcObject = stream
-    } catch (e) {
-      console.error('No se pudo acceder a la cámara:', e)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (modo && !imagen) iniciarCamara()
-    return () => pararCamara()
-  }, [modo, imagen, iniciarCamara, pararCamara])
-
-  function capturarFoto() {
-    const video = videoRef.current
-    if (!video) return
-    const canvas = document.createElement('canvas')
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
-    canvas.getContext('2d').drawImage(video, 0, 0)
-    setImagen(canvas.toDataURL('image/jpeg', 0.9))
-    pararCamara()
-  }
-
-  function subirDesdeGaleria(e) {
+  async function elegirArchivo(e) {
     const archivo = e.target.files?.[0]
+    e.target.value = ''
     if (!archivo) return
-    const lector = new FileReader()
-    lector.onload = () => setImagen(lector.result)
-    lector.readAsDataURL(archivo)
-    pararCamara()
+    setErrorAnalisis('')
+    try {
+      const { dataUrl, mimeType: tipo } = await comprimirImagen(archivo)
+      setImagen(dataUrl)
+      setMimeType(tipo)
+    } catch (err) {
+      console.error('Error procesando la foto:', err)
+      setErrorAnalisis('No hemos podido procesar la foto. Prueba con otra.')
+    }
   }
 
   function repetirFoto() {
@@ -75,26 +63,93 @@ export default function Escanear() {
   }
 
   function cerrar() {
-    pararCamara()
     navigate('/despensa')
+  }
+
+  // Cambia al modo 'producto' de toda la vida (foto + IA) sin perder el
+  // código de barras ya leído, para poder identificar un producto que no
+  // estaba en el catálogo compartido.
+  function identificarProductoNuevo() {
+    setModo('producto')
+    setImagen(null)
+    setErrorAnalisis('')
+    setAvisoCodigoNuevo(true)
   }
 
   async function analizar() {
     setAnalizando(true)
     setErrorAnalisis('')
     try {
-      const resultado = await analizarImagen(imagen, modo)
+      const resultado = await analizarImagen(imagen, modo, mimeType)
       if (!resultado.items || resultado.items.length === 0) {
         throw new Error('No se detectó ningún producto en la imagen.')
       }
+      // Si veníamos de leer un código de barras nuevo, lo adjuntamos al
+      // primer producto detectado para poder sumarlo al catálogo al guardar.
+      const items = codigoBarrasPendiente
+        ? resultado.items.map((it, i) =>
+            i === 0 ? { ...it, codigoBarras: codigoBarrasPendiente } : it
+          )
+        : resultado.items
       navigate('/confirmar-escaneo', {
-        state: { items: resultado.items, supermercado: resultado.supermercado },
+        state: { items, supermercado: resultado.supermercado },
       })
     } catch (e) {
       console.error('Error analizando la imagen:', e)
       setErrorAnalisis(
         'No hemos podido analizar la imagen. Puedes añadir el alimento a mano.'
       )
+      setAnalizando(false)
+    }
+  }
+
+  // Lee el código de barras de la foto (100% local, sin IA) y busca el
+  // producto en el catálogo compartido. Si ya lo conoce la comunidad, va
+  // directo a confirmar sin más fotos; si no, pide identificarlo con una
+  // foto normal del envase.
+  async function leerCodigoBarras() {
+    setAnalizando(true)
+    setErrorAnalisis('')
+    try {
+      const codigo = await decodificarCodigoBarras(imagen)
+      if (!codigo) {
+        setErrorAnalisis(
+          'No hemos podido leer el código de barras. Acércate más y que se vea nítido, o prueba con "Producto suelto".'
+        )
+        setAnalizando(false)
+        return
+      }
+
+      const producto = await buscarProductoPorCodigoBarras(codigo)
+      if (producto) {
+        navigate('/confirmar-escaneo', {
+          state: {
+            items: [
+              {
+                nombre: producto.nombre,
+                marca: producto.marca,
+                precio: null,
+                categoria_sugerida: producto.categoria,
+                kcal: producto.kcal,
+                proteinas: producto.proteinas,
+                hidratos: producto.hidratos,
+                grasas: producto.grasas,
+                codigoBarras: producto.codigoBarras,
+                encontradoEnCatalogo: true,
+              },
+            ],
+            supermercado: null,
+          },
+        })
+        return
+      }
+
+      // Código leído pero producto no está aún en el catálogo compartido.
+      setCodigoBarrasPendiente(codigo)
+      identificarProductoNuevo()
+    } catch (e) {
+      console.error('Error leyendo el código de barras:', e)
+      setErrorAnalisis('No hemos podido leer el código de barras. Inténtalo de nuevo.')
       setAnalizando(false)
     }
   }
@@ -111,11 +166,16 @@ export default function Escanear() {
       {!modo && <SelectorModo onElegir={setModo} />}
 
       {modo && !imagen && (
-        <VisorCamara
-          videoRef={videoRef}
+        <SelectorFoto
           modo={modo}
-          onCapturar={capturarFoto}
-          onSubir={() => fileInputRef.current?.click()}
+          error={errorAnalisis}
+          aviso={
+            modo === 'producto' && avisoCodigoNuevo
+              ? 'No lo teníamos en el catálogo compartido. Identifícalo con una foto y la próxima vez será instantáneo para todos.'
+              : ''
+          }
+          onCamara={() => camaraRef.current?.click()}
+          onGaleria={() => galeriaRef.current?.click()}
         />
       )}
 
@@ -126,17 +186,35 @@ export default function Escanear() {
           analizando={analizando}
           error={errorAnalisis}
           onRepetir={repetirFoto}
-          onAnalizar={analizar}
+          onAnalizar={modo === 'codigo_barras' ? leerCodigoBarras : analizar}
           onAnadirManual={() => navigate('/anadir')}
+          onEscanearSinCodigo={
+            modo === 'codigo_barras'
+              ? () => {
+                  setCodigoBarrasPendiente(null)
+                  setModo('producto')
+                  setImagen(null)
+                  setErrorAnalisis('')
+                }
+              : null
+          }
         />
       )}
 
       <input
-        ref={fileInputRef}
+        ref={camaraRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={elegirArchivo}
+      />
+      <input
+        ref={galeriaRef}
         type="file"
         accept="image/*"
         className="hidden"
-        onChange={subirDesdeGaleria}
+        onChange={elegirArchivo}
       />
     </div>
   )
@@ -161,6 +239,12 @@ function SelectorModo({ onElegir }) {
           subtitulo="Detecta nombre y marca; el precio lo pones tú"
           onClick={() => onElegir('producto')}
         />
+        <BotonModo
+          icono={<ScanBarcode size={24} />}
+          titulo="Código de barras"
+          subtitulo="Al instante si ya lo escaneó otro usuario"
+          onClick={() => onElegir('codigo_barras')}
+        />
       </div>
     </div>
   )
@@ -183,49 +267,60 @@ function BotonModo({ icono, titulo, subtitulo, onClick }) {
   )
 }
 
-function VisorCamara({ videoRef, modo, onCapturar, onSubir }) {
+function SelectorFoto({ modo, error, aviso, onCamara, onGaleria }) {
+  const icono =
+    modo === 'ticket' ? (
+      <Receipt size={30} className="text-brand-400" />
+    ) : modo === 'codigo_barras' ? (
+      <ScanBarcode size={30} className="text-brand-400" />
+    ) : (
+      <Package size={30} className="text-brand-400" />
+    )
+  const titulo =
+    modo === 'ticket' ? 'Ticket de compra' : modo === 'codigo_barras' ? 'Código de barras' : 'Producto suelto'
+  const descripcion =
+    modo === 'ticket'
+      ? 'Haz una foto nítida y completa del ticket, con todos los productos visibles.'
+      : modo === 'codigo_barras'
+        ? 'Encuadra bien el código de barras, cerca y sin reflejos.'
+        : 'Haz una foto del envase donde se vea bien el nombre y la marca.'
+
   return (
-    <>
-      <div className="absolute inset-0 bg-black">
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className="w-full h-full object-cover"
-        />
+    <div className="h-full flex flex-col items-center justify-center px-8 text-center animate-slide-up">
+      <div className="w-16 h-16 rounded-2xl bg-brand-500/20 flex items-center justify-center mb-5">
+        {icono}
       </div>
+      <p className="font-bold text-lg mb-1.5">{titulo}</p>
+      <p className="text-white/60 text-sm mb-8 max-w-[260px]">{descripcion}</p>
 
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="relative w-64 h-64">
-          <Esquina clases="top-0 left-0 border-t-4 border-l-4 rounded-tl-2xl" />
-          <Esquina clases="top-0 right-0 border-t-4 border-r-4 rounded-tr-2xl" />
-          <Esquina clases="bottom-0 left-0 border-b-4 border-l-4 rounded-bl-2xl" />
-          <Esquina clases="bottom-0 right-0 border-b-4 border-r-4 rounded-br-2xl" />
+      {aviso && (
+        <div className="bg-brand-500/15 text-brand-300 text-sm font-semibold rounded-xl px-4 py-3 mb-4 max-w-xs">
+          {aviso}
         </div>
-      </div>
+      )}
 
-      <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/70 to-transparent">
-        <p className="text-white/80 font-semibold mb-4 text-center">
-          {modo === 'ticket' ? 'Apunta al ticket de la compra' : 'Apunta al producto'}
-        </p>
-        <div className="flex items-center justify-center gap-4">
-          <button
-            onClick={onSubir}
-            className="w-14 h-14 rounded-full bg-white/15 backdrop-blur flex items-center justify-center active:scale-95 transition"
-          >
-            <ImageIcon size={22} />
-          </button>
-          <button
-            onClick={onCapturar}
-            className="w-16 h-16 rounded-full bg-white flex items-center justify-center active:scale-95 transition ring-4 ring-white/30"
-          >
-            <Camera size={26} className="text-gray-800" />
-          </button>
-          <div className="w-14 h-14" />
+      {error && (
+        <div className="bg-amber-500/15 text-amber-300 text-sm font-semibold rounded-xl px-4 py-3 flex items-start gap-2 mb-4 max-w-xs">
+          <AlertTriangle size={18} className="shrink-0 mt-0.5" />
+          <span>{error}</span>
         </div>
+      )}
+
+      <div className="w-full max-w-xs space-y-3">
+        <button
+          onClick={onCamara}
+          className="w-full bg-brand-500 text-white font-extrabold text-lg py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition shadow-soft"
+        >
+          <Camera size={20} /> Hacer foto
+        </button>
+        <button
+          onClick={onGaleria}
+          className="w-full bg-white/10 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition"
+        >
+          <ImageIcon size={18} /> Elegir de la galería
+        </button>
       </div>
-    </>
+    </div>
   )
 }
 
@@ -237,7 +332,13 @@ function Previsualizacion({
   onRepetir,
   onAnalizar,
   onAnadirManual,
+  onEscanearSinCodigo,
 }) {
+  const textoBoton =
+    modo === 'codigo_barras'
+      ? 'Leer código de barras'
+      : `Analizar ${modo === 'ticket' ? 'ticket' : 'producto'}`
+
   return (
     <>
       <div className="absolute inset-0 bg-black">
@@ -253,12 +354,22 @@ function Previsualizacion({
         )}
 
         {error ? (
-          <button
-            onClick={onAnadirManual}
-            className="w-full bg-brand-500 text-white font-extrabold text-lg py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition shadow-soft"
-          >
-            Añadir a mano
-          </button>
+          <>
+            {onEscanearSinCodigo && (
+              <button
+                onClick={onEscanearSinCodigo}
+                className="w-full bg-brand-500 text-white font-extrabold text-lg py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition shadow-soft"
+              >
+                <Package size={20} /> Escanear producto suelto
+              </button>
+            )}
+            <button
+              onClick={onAnadirManual}
+              className="w-full bg-white/10 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition"
+            >
+              Añadir a mano
+            </button>
+          </>
         ) : (
           <button
             onClick={onAnalizar}
@@ -267,11 +378,13 @@ function Previsualizacion({
           >
             {analizando ? (
               <>
-                <Loader2 size={20} className="animate-spin" /> Analizando…
+                <Loader2 size={20} className="animate-spin" />{' '}
+                {modo === 'codigo_barras' ? 'Leyendo…' : 'Analizando…'}
               </>
             ) : (
               <>
-                <Sparkles size={20} /> Analizar {modo === 'ticket' ? 'ticket' : 'producto'}
+                {modo === 'codigo_barras' ? <ScanBarcode size={20} /> : <Sparkles size={20} />}{' '}
+                {textoBoton}
               </>
             )}
           </button>
@@ -288,8 +401,4 @@ function Previsualizacion({
       </div>
     </>
   )
-}
-
-function Esquina({ clases }) {
-  return <div className={`absolute w-8 h-8 border-brand-400 ${clases}`} />
 }

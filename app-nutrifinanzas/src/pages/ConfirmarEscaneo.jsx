@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeft, Check, Loader2, Trash2, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Check, Loader2, Trash2, AlertTriangle, ScanLine } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { CATEGORIAS, SUPERMERCADOS } from '../data/categorias.js'
+import EscanerNutricional from '../components/EscanerNutricional.jsx'
+import { guardarProductoEnCatalogo } from '../lib/productos.js'
 
 // Bloque 3: muestra los alimentos que detectó la IA a partir del ticket o
 // producto escaneado, y deja editarlos antes de guardarlos todos en la
@@ -29,10 +31,21 @@ export default function ConfirmarEscaneo() {
       categoria: CATEGORIAS.some((c) => c.id === it.categoria_sugerida)
         ? it.categoria_sugerida
         : 'Otros',
+      // Macros por 100 g/ml (ya vienen rellenos si el producto se encontró
+      // en el catálogo compartido por código de barras; si no, null hasta
+      // que se escanee la etiqueta)
+      kcal: it.kcal ?? null,
+      proteinas: it.proteinas ?? null,
+      hidratos: it.hidratos ?? null,
+      grasas: it.grasas ?? null,
+      codigoBarras: it.codigoBarras || null,
+      encontradoEnCatalogo: !!it.encontradoEnCatalogo,
     }))
   )
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
+  // idTmp del producto cuya etiqueta se está escaneando (o null)
+  const [escanerItem, setEscanerItem] = useState(null)
 
   if (detectados.length === 0) {
     return (
@@ -59,6 +72,24 @@ export default function ConfirmarEscaneo() {
     setItems((prev) => prev.filter((it) => it.idTmp !== idTmp))
   }
 
+  // Aplica los macros leídos de una etiqueta al producto que se estaba escaneando.
+  function macrosDetectados(nutricion) {
+    setItems((prev) =>
+      prev.map((it) =>
+        it.idTmp === escanerItem
+          ? {
+              ...it,
+              kcal: nutricion.kcal ?? it.kcal,
+              proteinas: nutricion.proteinas ?? it.proteinas,
+              hidratos: nutricion.hidratos ?? it.hidratos,
+              grasas: nutricion.grasas ?? it.grasas,
+            }
+          : it
+      )
+    )
+    setEscanerItem(null)
+  }
+
   async function guardarTodo() {
     if (items.length === 0) return
     setGuardando(true)
@@ -71,13 +102,33 @@ export default function ConfirmarEscaneo() {
             nombre: it.nombre.trim(),
             marca: it.marca.trim() || null,
             cantidad: it.cantidad || '1 ud',
-            kcal: 0,
+            kcal: it.kcal ?? 0,
+            proteinas: it.proteinas,
+            hidratos: it.hidratos,
+            grasas: it.grasas,
             precio: it.precio === '' ? 0 : Number(it.precio),
             supermercado,
             categoria: it.categoria,
+            codigoBarras: it.codigoBarras,
           },
           'escaner'
         )
+
+        // Si es un producto nuevo identificado por código de barras (no
+        // estaba ya en el catálogo compartido) y tiene macros, lo sumamos
+        // al catálogo para que la próxima persona no tenga que escanearlo.
+        if (it.codigoBarras && !it.encontradoEnCatalogo && it.kcal != null) {
+          await guardarProductoEnCatalogo({
+            codigoBarras: it.codigoBarras,
+            nombre: it.nombre.trim(),
+            marca: it.marca.trim() || null,
+            kcal: it.kcal,
+            proteinas: it.proteinas,
+            hidratos: it.hidratos,
+            grasas: it.grasas,
+            categoria: it.categoria,
+          })
+        }
       }
       navigate('/despensa')
     } catch (e) {
@@ -138,11 +189,24 @@ export default function ConfirmarEscaneo() {
                 </button>
               </div>
 
+              {it.encontradoEnCatalogo && (
+                <p className="text-xs font-bold text-brand-600 flex items-center gap-1 mb-2">
+                  <Check size={13} /> Producto reconocido del catálogo compartido
+                </p>
+              )}
+
+              <input
+                value={it.marca}
+                onChange={(e) => set(it.idTmp, 'marca', e.target.value)}
+                placeholder="Marca (opcional)"
+                className="w-full bg-gray-50 rounded-xl px-3 py-2 text-sm text-gray-700 outline-none focus:ring-2 ring-brand-300 mb-2"
+              />
+
               <div className="grid grid-cols-2 gap-2 mb-2">
                 <input
-                  value={it.marca}
-                  onChange={(e) => set(it.idTmp, 'marca', e.target.value)}
-                  placeholder="Marca (opcional)"
+                  value={it.cantidad}
+                  onChange={(e) => set(it.idTmp, 'cantidad', e.target.value)}
+                  placeholder="Ej. 1 ud, 4 ud, 500 g"
                   className="bg-gray-50 rounded-xl px-3 py-2 text-sm text-gray-700 outline-none focus:ring-2 ring-brand-300"
                 />
                 <input
@@ -166,6 +230,27 @@ export default function ConfirmarEscaneo() {
                   </option>
                 ))}
               </select>
+
+              {tieneMacros(it) ? (
+                <div className="mt-2 flex items-center justify-between bg-brand-50 rounded-xl px-3 py-2">
+                  <span className="text-xs font-bold text-brand-700 flex items-center gap-1.5">
+                    <Check size={14} /> {resumenMacros(it)}
+                  </span>
+                  <button
+                    onClick={() => setEscanerItem(it.idTmp)}
+                    className="text-xs font-bold text-brand-600 underline active:scale-95 transition"
+                  >
+                    Repetir
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setEscanerItem(it.idTmp)}
+                  className="mt-2 w-full bg-gray-50 text-gray-600 text-sm font-bold py-2.5 rounded-xl flex items-center justify-center gap-1.5 active:scale-[0.98] transition"
+                >
+                  <ScanLine size={15} /> Escanear info nutricional
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -199,6 +284,30 @@ export default function ConfirmarEscaneo() {
           )}
         </button>
       </div>
+
+      {escanerItem !== null && (
+        <EscanerNutricional
+          onCerrar={() => setEscanerItem(null)}
+          onDetectado={macrosDetectados}
+        />
+      )}
     </div>
   )
+}
+
+// ¿El producto tiene algún macro cargado?
+function tieneMacros(it) {
+  return [it.kcal, it.proteinas, it.hidratos, it.grasas].some(
+    (v) => v !== null && v !== undefined
+  )
+}
+
+// Resumen corto de los macros para mostrar en la tarjeta.
+function resumenMacros(it) {
+  const partes = []
+  if (it.kcal != null) partes.push(`${it.kcal} kcal`)
+  if (it.proteinas != null) partes.push(`P ${it.proteinas}`)
+  if (it.hidratos != null) partes.push(`H ${it.hidratos}`)
+  if (it.grasas != null) partes.push(`G ${it.grasas}`)
+  return partes.join(' · ') + ' /100g'
 }
