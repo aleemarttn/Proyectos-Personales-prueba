@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   X,
@@ -9,23 +9,36 @@ import {
   Receipt,
   Package,
   ScanBarcode,
+  Barcode,
   Loader2,
   AlertTriangle,
 } from 'lucide-react'
+import { BrowserMultiFormatReader } from '@zxing/browser'
+import { BarcodeFormat, DecodeHintType } from '@zxing/library'
 import { analizarImagen } from '../lib/ocr.js'
 import { comprimirImagen } from '../utils/imagen.js'
-import { decodificarCodigoBarras } from '../lib/barcode.js'
+import { consultarOpenFoodFacts } from '../lib/barcode.js'
 import { buscarProductoPorCodigoBarras } from '../lib/productos.js'
 
-// Escáner real: selector de modo (ticket o producto suelto), captura con
-// la CÁMARA NATIVA del sistema o galería, previsualización, y análisis con
-// IA (Gemini, vía Edge Function). Si el análisis falla, cae al formulario
-// manual (Bloque 4).
+const FORMATOS_BARRA = [
+  BarcodeFormat.EAN_13,
+  BarcodeFormat.EAN_8,
+  BarcodeFormat.UPC_A,
+  BarcodeFormat.UPC_E,
+]
+
+// Escáner real: selector de modo (ticket, producto suelto o código de
+// barras), captura con la CÁMARA NATIVA del sistema o galería para ticket/
+// producto, y análisis con IA (Gemini, vía Edge Function). Si el análisis
+// falla, cae al formulario manual (Bloque 4).
 //
-// La foto se toma con la cámara nativa (input file capture="environment"),
-// no con una vista de cámara en vivo (getUserMedia): Safari/iOS no da
-// autoenfoque fiable en getUserMedia, y para leer texto pequeño (ticket,
-// etiqueta) hace falta el enfoque de la app de cámara nativa.
+// Para ticket/producto la foto se toma con la cámara nativa (input file
+// capture="environment"), no con una vista de cámara en vivo (getUserMedia):
+// Safari/iOS no da autoenfoque fiable en getUserMedia, y para leer texto
+// pequeño (ticket, etiqueta) hace falta el enfoque de la app de cámara
+// nativa. El código de barras es distinto: ahí sí usamos getUserMedia en
+// vivo (sin botón de disparo) porque decodificar un patrón de barras no
+// necesita ese enfoque fino y así el escaneo es instantáneo.
 export default function Escanear() {
   const navigate = useNavigate()
   const [modo, setModo] = useState(null) // null | 'ticket' | 'producto' | 'codigo_barras'
@@ -33,9 +46,11 @@ export default function Escanear() {
   const [mimeType, setMimeType] = useState('image/jpeg')
   const [analizando, setAnalizando] = useState(false)
   const [errorAnalisis, setErrorAnalisis] = useState('')
-  // Código de barras leído que no estaba en el catálogo compartido: se
-  // adjunta al producto una vez identificado por foto, para poder guardarlo
-  // en el catálogo al confirmar (Bloque "Fase 3").
+  // Estado del visor en vivo de código de barras.
+  const [estadoBarra, setEstadoBarra] = useState('escaneando') // 'escaneando' | 'buscando' | 'error_camara'
+  // Código de barras leído que no estaba ni en el catálogo compartido ni en
+  // Open Food Facts: se adjunta al producto una vez identificado por foto,
+  // para poder guardarlo en el catálogo al confirmar.
   const [codigoBarrasPendiente, setCodigoBarrasPendiente] = useState(null)
   const [avisoCodigoNuevo, setAvisoCodigoNuevo] = useState(false)
 
@@ -66,9 +81,14 @@ export default function Escanear() {
     navigate('/despensa')
   }
 
+  function elegirModo(m) {
+    setModo(m)
+    setEstadoBarra('escaneando')
+  }
+
   // Cambia al modo 'producto' de toda la vida (foto + IA) sin perder el
   // código de barras ya leído, para poder identificar un producto que no
-  // estaba en el catálogo compartido.
+  // estaba ni en el catálogo compartido ni en Open Food Facts.
   function identificarProductoNuevo() {
     setModo('producto')
     setImagen(null)
@@ -103,56 +123,74 @@ export default function Escanear() {
     }
   }
 
-  // Lee el código de barras de la foto (100% local, sin IA) y busca el
-  // producto en el catálogo compartido. Si ya lo conoce la comunidad, va
-  // directo a confirmar sin más fotos; si no, pide identificarlo con una
-  // foto normal del envase.
-  async function leerCodigoBarras() {
-    setAnalizando(true)
-    setErrorAnalisis('')
-    try {
-      const codigo = await decodificarCodigoBarras(imagen)
-      if (!codigo) {
-        setErrorAnalisis(
-          'No hemos podido leer el código de barras. Acércate más y que se vea nítido, o prueba con "Producto suelto".'
-        )
-        setAnalizando(false)
-        return
-      }
+  // Un código de barras se acaba de leer con la cámara en vivo. Primero
+  // miramos el catálogo compartido en Supabase (instantáneo); si no está,
+  // consultamos Open Food Facts para autocompletar sin pedir foto ni IA;
+  // si tampoco tiene información, caemos al flujo de foto + IA de siempre.
+  const manejarCodigoDetectado = useCallback(
+    async (codigo) => {
+      setEstadoBarra('buscando')
+      try {
+        const delCatalogo = await buscarProductoPorCodigoBarras(codigo)
+        if (delCatalogo) {
+          navigate('/confirmar-escaneo', {
+            state: {
+              items: [
+                {
+                  nombre: delCatalogo.nombre,
+                  marca: delCatalogo.marca,
+                  precio: null,
+                  categoria_sugerida: delCatalogo.categoria,
+                  kcal: delCatalogo.kcal,
+                  proteinas: delCatalogo.proteinas,
+                  hidratos: delCatalogo.hidratos,
+                  grasas: delCatalogo.grasas,
+                  codigoBarras: delCatalogo.codigoBarras,
+                  encontradoEnCatalogo: true,
+                },
+              ],
+              supermercado: null,
+            },
+          })
+          return
+        }
 
-      const producto = await buscarProductoPorCodigoBarras(codigo)
-      if (producto) {
-        navigate('/confirmar-escaneo', {
-          state: {
-            items: [
-              {
-                nombre: producto.nombre,
-                marca: producto.marca,
-                precio: null,
-                categoria_sugerida: producto.categoria,
-                kcal: producto.kcal,
-                proteinas: producto.proteinas,
-                hidratos: producto.hidratos,
-                grasas: producto.grasas,
-                codigoBarras: producto.codigoBarras,
-                encontradoEnCatalogo: true,
-              },
-            ],
-            supermercado: null,
-          },
-        })
-        return
-      }
+        const deOpenFoodFacts = await consultarOpenFoodFacts(codigo)
+        if (deOpenFoodFacts.encontrado) {
+          navigate('/confirmar-escaneo', {
+            state: {
+              items: [
+                {
+                  nombre: deOpenFoodFacts.nombre,
+                  marca: deOpenFoodFacts.marca,
+                  precio: null,
+                  categoria_sugerida: deOpenFoodFacts.categoria,
+                  kcal: deOpenFoodFacts.kcal,
+                  proteinas: deOpenFoodFacts.proteinas,
+                  hidratos: deOpenFoodFacts.hidratos,
+                  grasas: deOpenFoodFacts.grasas,
+                  codigoBarras: codigo,
+                  encontradoEnCatalogo: false,
+                },
+              ],
+              supermercado: null,
+            },
+          })
+          return
+        }
 
-      // Código leído pero producto no está aún en el catálogo compartido.
-      setCodigoBarrasPendiente(codigo)
-      identificarProductoNuevo()
-    } catch (e) {
-      console.error('Error leyendo el código de barras:', e)
-      setErrorAnalisis('No hemos podido leer el código de barras. Inténtalo de nuevo.')
-      setAnalizando(false)
-    }
-  }
+        // Ni en el catálogo compartido ni en Open Food Facts: identificarlo
+        // con una foto normal del envase.
+        setCodigoBarrasPendiente(codigo)
+        identificarProductoNuevo()
+      } catch (e) {
+        console.error('Error buscando el producto por código de barras:', e)
+        setEstadoBarra('error_camara')
+        setErrorAnalisis('No se pudo consultar la información del producto. Comprueba tu conexión.')
+      }
+    },
+    [navigate]
+  )
 
   return (
     <div className="relative h-full bg-gray-900 text-white overflow-hidden animate-fade-in">
@@ -163,15 +201,42 @@ export default function Escanear() {
         <X size={22} />
       </button>
 
-      {!modo && <SelectorModo onElegir={setModo} />}
+      {!modo && <SelectorModo onElegir={elegirModo} />}
 
-      {modo && !imagen && (
+      {modo === 'codigo_barras' && estadoBarra === 'escaneando' && (
+        <VisorCodigoBarras
+          onDetectado={manejarCodigoDetectado}
+          onSinCodigo={() => {
+            setCodigoBarrasPendiente(null)
+            setModo('producto')
+          }}
+        />
+      )}
+
+      {modo === 'codigo_barras' && estadoBarra === 'buscando' && (
+        <PantallaEstado icono={<Loader2 size={36} className="animate-spin" />}>
+          Buscando información del producto…
+        </PantallaEstado>
+      )}
+
+      {modo === 'codigo_barras' && estadoBarra === 'error_camara' && (
+        <SinInformacion
+          error={errorAnalisis}
+          onReintentar={() => {
+            setErrorAnalisis('')
+            setEstadoBarra('escaneando')
+          }}
+          onAnadirManual={() => navigate('/anadir')}
+        />
+      )}
+
+      {(modo === 'ticket' || modo === 'producto') && !imagen && (
         <SelectorFoto
           modo={modo}
           error={errorAnalisis}
           aviso={
             modo === 'producto' && avisoCodigoNuevo
-              ? 'No lo teníamos en el catálogo compartido. Identifícalo con una foto y la próxima vez será instantáneo para todos.'
+              ? 'No lo teníamos ni en el catálogo compartido ni en Open Food Facts. Identifícalo con una foto y la próxima vez será instantáneo para todos.'
               : ''
           }
           onCamara={() => camaraRef.current?.click()}
@@ -179,25 +244,15 @@ export default function Escanear() {
         />
       )}
 
-      {modo && imagen && (
+      {(modo === 'ticket' || modo === 'producto') && imagen && (
         <Previsualizacion
           imagen={imagen}
           modo={modo}
           analizando={analizando}
           error={errorAnalisis}
           onRepetir={repetirFoto}
-          onAnalizar={modo === 'codigo_barras' ? leerCodigoBarras : analizar}
+          onAnalizar={analizar}
           onAnadirManual={() => navigate('/anadir')}
-          onEscanearSinCodigo={
-            modo === 'codigo_barras'
-              ? () => {
-                  setCodigoBarrasPendiente(null)
-                  setModo('producto')
-                  setImagen(null)
-                  setErrorAnalisis('')
-                }
-              : null
-          }
         />
       )}
 
@@ -242,7 +297,7 @@ function SelectorModo({ onElegir }) {
         <BotonModo
           icono={<ScanBarcode size={24} />}
           titulo="Código de barras"
-          subtitulo="Al instante si ya lo escaneó otro usuario"
+          subtitulo="Al instante si ya lo conoce la comunidad o Open Food Facts"
           onClick={() => onElegir('codigo_barras')}
         />
       </div>
@@ -271,19 +326,14 @@ function SelectorFoto({ modo, error, aviso, onCamara, onGaleria }) {
   const icono =
     modo === 'ticket' ? (
       <Receipt size={30} className="text-brand-400" />
-    ) : modo === 'codigo_barras' ? (
-      <ScanBarcode size={30} className="text-brand-400" />
     ) : (
       <Package size={30} className="text-brand-400" />
     )
-  const titulo =
-    modo === 'ticket' ? 'Ticket de compra' : modo === 'codigo_barras' ? 'Código de barras' : 'Producto suelto'
+  const titulo = modo === 'ticket' ? 'Ticket de compra' : 'Producto suelto'
   const descripcion =
     modo === 'ticket'
       ? 'Haz una foto nítida y completa del ticket, con todos los productos visibles.'
-      : modo === 'codigo_barras'
-        ? 'Encuadra bien el código de barras, cerca y sin reflejos.'
-        : 'Haz una foto del envase donde se vea bien el nombre y la marca.'
+      : 'Haz una foto del envase donde se vea bien el nombre y la marca.'
 
   return (
     <div className="h-full flex flex-col items-center justify-center px-8 text-center animate-slide-up">
@@ -324,6 +374,114 @@ function SelectorFoto({ modo, error, aviso, onCamara, onGaleria }) {
   )
 }
 
+// Visor en vivo del código de barras: cámara siempre encendida (sin botón
+// de disparo), decodificando cada fotograma hasta encontrar un EAN/UPC.
+function VisorCodigoBarras({ onDetectado, onSinCodigo }) {
+  const videoRef = useRef(null)
+
+  useEffect(() => {
+    let activo = true
+    let controls
+
+    const hints = new Map()
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, FORMATOS_BARRA)
+    const lector = new BrowserMultiFormatReader(hints)
+
+    lector
+      .decodeFromConstraints(
+        { video: { facingMode: 'environment' } },
+        videoRef.current,
+        (resultado) => {
+          if (resultado && activo) {
+            activo = false
+            controls?.stop()
+            onDetectado(resultado.getText())
+          }
+        }
+      )
+      .then((c) => {
+        controls = c
+        if (!activo) controls.stop() // ya se detectó o se desmontó antes de tener controles
+      })
+      .catch((e) => console.error('No se pudo acceder a la cámara:', e))
+
+    return () => {
+      activo = false
+      controls?.stop()
+    }
+  }, [onDetectado])
+
+  return (
+    <>
+      <div className="absolute inset-0 bg-black">
+        <video ref={videoRef} muted playsInline className="w-full h-full object-cover" />
+      </div>
+
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="relative w-72 h-36">
+          <Esquina clases="top-0 left-0 border-t-4 border-l-4 rounded-tl-2xl" />
+          <Esquina clases="top-0 right-0 border-t-4 border-r-4 rounded-tr-2xl" />
+          <Esquina clases="bottom-0 left-0 border-b-4 border-l-4 rounded-bl-2xl" />
+          <Esquina clases="bottom-0 right-0 border-b-4 border-r-4 rounded-br-2xl" />
+        </div>
+      </div>
+
+      <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/70 to-transparent">
+        <p className="text-white/80 font-semibold mb-4 text-center flex items-center justify-center gap-2">
+          <Barcode size={18} /> Apunta al código de barras del producto
+        </p>
+        <button
+          onClick={onSinCodigo}
+          className="w-full bg-white/10 text-white font-bold py-3.5 rounded-2xl active:scale-[0.98] transition"
+        >
+          No tiene código de barras / hacer foto
+        </button>
+      </div>
+    </>
+  )
+}
+
+function Esquina({ clases }) {
+  return <div className={`absolute w-8 h-8 border-brand-400 ${clases}`} />
+}
+
+function PantallaEstado({ icono, children }) {
+  return (
+    <div className="h-full flex flex-col items-center justify-center px-8 text-center animate-fade-in">
+      <div className="mb-4 text-white/80">{icono}</div>
+      <p className="text-white/80 font-semibold">{children}</p>
+    </div>
+  )
+}
+
+function SinInformacion({ error, onReintentar, onAnadirManual }) {
+  return (
+    <div className="h-full flex flex-col items-center justify-center px-8 text-center animate-fade-in">
+      <AlertTriangle className="text-amber-400 mb-3" size={40} />
+      <p className="font-bold text-white/90 mb-1">
+        No se pudo consultar la información del producto.
+      </p>
+      <p className="text-white/50 text-sm mb-6">
+        {error || 'Comprueba tu conexión e inténtalo de nuevo, o añade el alimento a mano.'}
+      </p>
+      <div className="w-full space-y-3">
+        <button
+          onClick={onReintentar}
+          className="w-full bg-brand-500 text-white font-extrabold py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition shadow-soft"
+        >
+          <RotateCcw size={20} /> Volver a intentar
+        </button>
+        <button
+          onClick={onAnadirManual}
+          className="w-full bg-white/10 text-white font-bold py-3.5 rounded-2xl active:scale-[0.98] transition"
+        >
+          Añadir a mano
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function Previsualizacion({
   imagen,
   modo,
@@ -332,13 +490,7 @@ function Previsualizacion({
   onRepetir,
   onAnalizar,
   onAnadirManual,
-  onEscanearSinCodigo,
 }) {
-  const textoBoton =
-    modo === 'codigo_barras'
-      ? 'Leer código de barras'
-      : `Analizar ${modo === 'ticket' ? 'ticket' : 'producto'}`
-
   return (
     <>
       <div className="absolute inset-0 bg-black">
@@ -354,22 +506,12 @@ function Previsualizacion({
         )}
 
         {error ? (
-          <>
-            {onEscanearSinCodigo && (
-              <button
-                onClick={onEscanearSinCodigo}
-                className="w-full bg-brand-500 text-white font-extrabold text-lg py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition shadow-soft"
-              >
-                <Package size={20} /> Escanear producto suelto
-              </button>
-            )}
-            <button
-              onClick={onAnadirManual}
-              className="w-full bg-white/10 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition"
-            >
-              Añadir a mano
-            </button>
-          </>
+          <button
+            onClick={onAnadirManual}
+            className="w-full bg-white/10 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition"
+          >
+            Añadir a mano
+          </button>
         ) : (
           <button
             onClick={onAnalizar}
@@ -378,13 +520,11 @@ function Previsualizacion({
           >
             {analizando ? (
               <>
-                <Loader2 size={20} className="animate-spin" />{' '}
-                {modo === 'codigo_barras' ? 'Leyendo…' : 'Analizando…'}
+                <Loader2 size={20} className="animate-spin" /> Analizando…
               </>
             ) : (
               <>
-                {modo === 'codigo_barras' ? <ScanBarcode size={20} /> : <Sparkles size={20} />}{' '}
-                {textoBoton}
+                <Sparkles size={20} /> Analizar {modo === 'ticket' ? 'ticket' : 'producto'}
               </>
             )}
           </button>
