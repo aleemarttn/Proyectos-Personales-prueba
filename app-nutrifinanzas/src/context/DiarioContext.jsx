@@ -3,8 +3,9 @@ import { supabase } from '../lib/supabase.js'
 import { useAuth } from './AuthContext.jsx'
 
 // Este contexto guarda el DIARIO de consumo (tabla `registros_diarios`,
-// lo que te has comido hoy) y el resumen objetivo/consumido/restante
-// (vista `resumen_diario`). Cada usuario solo ve lo suyo (RLS).
+// lo que te has comido hoy), las COMIDAS del día del usuario (tabla
+// `comidas_usuario`: editables, máximo 7) y el resumen objetivo/consumido/
+// restante (vista `resumen_diario`). Cada usuario solo ve lo suyo (RLS).
 
 const DiarioContext = createContext(null)
 
@@ -25,9 +26,14 @@ function filaARegistro(fila) {
     origen: fila.origen,
     alimentoId: fila.alimento_id,
     codigoBarras: fila.codigo_barras,
+    comidaId: fila.comida_id,
     fecha: fila.fecha,
     creadoEn: fila.created_at,
   }
+}
+
+function filaAComida(fila) {
+  return { id: fila.id, nombre: fila.nombre, orden: fila.orden }
 }
 
 // Convierte la fila de la vista `resumen_diario` (puede no existir si el
@@ -50,6 +56,7 @@ function filaAResumen(fila) {
 export function DiarioProvider({ children }) {
   const { sesion } = useAuth()
   const [registrosHoy, setRegistrosHoy] = useState([])
+  const [comidas, setComidas] = useState([])
   const [resumen, setResumen] = useState(null)
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState('')
@@ -70,6 +77,7 @@ export function DiarioProvider({ children }) {
   useEffect(() => {
     if (!sesion) {
       setRegistrosHoy([])
+      setComidas([])
       setResumen(null)
       return
     }
@@ -83,9 +91,13 @@ export function DiarioProvider({ children }) {
         .from('registros_diarios')
         .select('*')
         .eq('fecha', hoyISO())
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: true }),
       supabase.from('resumen_diario').select('*').maybeSingle(),
-    ]).then(([registros, resumenFila]) => {
+      supabase
+        .from('comidas_usuario')
+        .select('*')
+        .order('orden', { ascending: true }),
+    ]).then(([registros, resumenFila, comidasFilas]) => {
       if (!activo) return
       if (registros.error) {
         console.error('Error cargando el diario de hoy:', registros.error)
@@ -97,6 +109,11 @@ export function DiarioProvider({ children }) {
         console.error('Error cargando el resumen diario:', resumenFila.error)
       } else {
         setResumen(filaAResumen(resumenFila.data))
+      }
+      if (comidasFilas.error) {
+        console.error('Error cargando las comidas:', comidasFilas.error)
+      } else {
+        setComidas(comidasFilas.data.map(filaAComida))
       }
       setCargando(false)
     })
@@ -114,6 +131,7 @@ export function DiarioProvider({ children }) {
       usuario_id: sesion.user.id,
       alimento_id: registro.alimentoId || null,
       codigo_barras: registro.codigoBarras || null,
+      comida_id: registro.comidaId || null,
       nombre: registro.nombre,
       cantidad_g: registro.cantidadG,
       kcal: registro.kcal,
@@ -132,7 +150,7 @@ export function DiarioProvider({ children }) {
     if (err) throw err
 
     const nuevo = filaARegistro(data)
-    setRegistrosHoy((prev) => [nuevo, ...prev])
+    setRegistrosHoy((prev) => [...prev, nuevo])
     await cargarResumen()
     return nuevo
   }
@@ -144,13 +162,108 @@ export function DiarioProvider({ children }) {
     await cargarResumen()
   }
 
+  // Mueve un registro ya guardado a otra comida (o a "sin asignar").
+  async function moverRegistro(id, comidaId) {
+    const { error: err } = await supabase
+      .from('registros_diarios')
+      .update({ comida_id: comidaId })
+      .eq('id', id)
+    if (err) throw err
+    setRegistrosHoy((prev) => prev.map((r) => (r.id === id ? { ...r, comidaId } : r)))
+  }
+
+  // --- Acciones sobre las comidas del día ---
+
+  // La base de datos rechaza la octava comida (trigger trg_limite_comidas);
+  // aquí cortamos antes para no gastar una ida y vuelta.
+  async function anadirComida(nombre) {
+    const limpio = (nombre || '').trim()
+    if (!limpio) throw new Error('El nombre no puede estar vacío.')
+    if (comidas.length >= 7) throw new Error('No puedes tener más de 7 comidas al día.')
+
+    const orden = comidas.length ? Math.max(...comidas.map((c) => c.orden)) + 1 : 0
+    const { data, error: err } = await supabase
+      .from('comidas_usuario')
+      .insert({ usuario_id: sesion.user.id, nombre: limpio, orden })
+      .select()
+      .single()
+
+    if (err) throw err
+    const nueva = filaAComida(data)
+    setComidas((prev) => [...prev, nueva].sort((a, b) => a.orden - b.orden))
+    return nueva
+  }
+
+  async function renombrarComida(id, nombre) {
+    const limpio = (nombre || '').trim()
+    if (!limpio) throw new Error('El nombre no puede estar vacío.')
+
+    const { error: err } = await supabase
+      .from('comidas_usuario')
+      .update({ nombre: limpio })
+      .eq('id', id)
+
+    if (err) throw err
+    setComidas((prev) => prev.map((c) => (c.id === id ? { ...c, nombre: limpio } : c)))
+  }
+
+  // Los registros de esa comida NO se borran: la FK es `on delete set null`,
+  // así que pasan a "Sin asignar" y siguen contando en el total del día.
+  async function eliminarComida(id) {
+    const { error: err } = await supabase.from('comidas_usuario').delete().eq('id', id)
+    if (err) throw err
+    setComidas((prev) => prev.filter((c) => c.id !== id))
+    setRegistrosHoy((prev) =>
+      prev.map((r) => (r.comidaId === id ? { ...r, comidaId: null } : r))
+    )
+  }
+
+  // Sube o baja una comida en el orden del día (delta: -1 o +1).
+  async function moverComida(id, delta) {
+    const ordenadas = [...comidas].sort((a, b) => a.orden - b.orden)
+    const i = ordenadas.findIndex((c) => c.id === id)
+    const j = i + delta
+    if (i === -1 || j < 0 || j >= ordenadas.length) return
+
+    // Intercambiamos las posiciones y reescribimos `orden` como 0..n-1,
+    // para que no se acumulen huecos tras varios movimientos.
+    const [movida] = ordenadas.splice(i, 1)
+    ordenadas.splice(j, 0, movida)
+    const conOrden = ordenadas.map((c, idx) => ({ ...c, orden: idx }))
+
+    setComidas(conOrden)
+
+    // UPDATE fila a fila y no `upsert`: en Postgres un INSERT .. ON CONFLICT
+    // dispara los triggers BEFORE INSERT ANTES de detectar el conflicto, así
+    // que con 7 comidas el upsert saltaría con "no puedes tener más de 7"
+    // aunque en realidad solo estuviéramos reordenando.
+    const resultados = await Promise.all(
+      conOrden.map((c) =>
+        supabase.from('comidas_usuario').update({ orden: c.orden }).eq('id', c.id)
+      )
+    )
+
+    const fallo = resultados.find((r) => r.error)
+    if (fallo) {
+      console.error('Error reordenando las comidas:', fallo.error)
+      setComidas(comidas) // deshacemos el cambio optimista
+      throw fallo.error
+    }
+  }
+
   const value = {
     registrosHoy,
+    comidas,
     resumen,
     cargando,
     error,
     agregarRegistro,
     eliminarRegistro,
+    moverRegistro,
+    anadirComida,
+    renombrarComida,
+    eliminarComida,
+    moverComida,
   }
 
   return <DiarioContext.Provider value={value}>{children}</DiarioContext.Provider>

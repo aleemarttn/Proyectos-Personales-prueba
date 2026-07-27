@@ -26,6 +26,8 @@ export async function buscarProductoPorCodigoBarras(codigoBarras) {
     hidratos: data.hidratos === null ? null : Number(data.hidratos),
     grasas: data.grasas === null ? null : Number(data.grasas),
     categoria: data.categoria,
+    pesoUnidadG: data.peso_unidad_g === null ? null : Number(data.peso_unidad_g),
+    unidadNombre: data.unidad_nombre,
   }
 }
 
@@ -50,6 +52,8 @@ export async function buscarProductosPorNombre(texto) {
     hidratos: d.hidratos === null ? null : Number(d.hidratos),
     grasas: d.grasas === null ? null : Number(d.grasas),
     categoria: d.categoria,
+    pesoUnidadG: d.peso_unidad_g === null ? null : Number(d.peso_unidad_g),
+    unidadNombre: d.unidad_nombre,
   }))
 }
 
@@ -70,6 +74,8 @@ export async function guardarProductoEnCatalogo(producto) {
         hidratos: producto.hidratos ?? null,
         grasas: producto.grasas ?? null,
         categoria: producto.categoria || null,
+        peso_unidad_g: producto.pesoUnidadG ?? null,
+        unidad_nombre: producto.unidadNombre || null,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'codigo_barras' }

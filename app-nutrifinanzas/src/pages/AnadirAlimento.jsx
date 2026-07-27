@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, Check, Loader2, CheckCircle2, ScanLine } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { CATEGORIAS, SUPERMERCADOS } from '../data/categorias.js'
+import { CATEGORIAS } from '../data/categorias.js'
 import EscanerNutricional from '../components/EscanerNutricional.jsx'
+import SupermercadoSelector from '../components/SupermercadoSelector.jsx'
 
 // Formulario para añadir un alimento. Si venimos del escáner, llega
 // con datos ya rellenados (location.state.prefill).
@@ -25,6 +26,8 @@ export default function AnadirAlimento() {
     precio: prefill.precio || '',
     supermercado: prefill.supermercado || 'Mercadona',
     categoria: prefill.categoria || 'Otros',
+    pesoUnidadG: prefill.pesoUnidadG ?? '',
+    unidadNombre: prefill.unidadNombre || '',
   })
 
   const [guardando, setGuardando] = useState(false)
@@ -78,6 +81,8 @@ export default function AnadirAlimento() {
           precio: Number(form.precio) || 0,
           supermercado: form.supermercado,
           categoria: form.categoria,
+          pesoUnidadG: aNumero(form.pesoUnidadG),
+          unidadNombre: form.unidadNombre.trim() || null,
         },
         origen
       )
@@ -139,11 +144,35 @@ export default function AnadirAlimento() {
           placeholder="Ej. Danone, Pascual"
         />
         <Campo
-          label="Cantidad"
+          label="Cantidad del envase"
           valor={form.cantidad}
           onChange={(v) => set('cantidad', v)}
-          placeholder="Ej. 1 kg, 500 g, 12 ud"
+          placeholder="Ej. 1 kg, 450 g, 12 ud"
+          ayuda="Tal como viene en el paquete al comprarlo, no lo que te vayas a comer."
         />
+
+        <div className="bg-white rounded-2xl p-4 shadow-card mt-3">
+          <p className="font-bold text-gray-800">Peso por unidad (opcional)</p>
+          <p className="text-xs text-gray-400 font-semibold mb-2">
+            Si se divide en piezas (rebanadas, huevos, lonchas...), guarda cuánto pesa cada una y
+            luego podrás registrar comidas por unidades en vez de pesar.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <Campo
+              label="Peso por unidad (g)"
+              tipo="number"
+              valor={form.pesoUnidadG}
+              onChange={(v) => set('pesoUnidadG', v)}
+              placeholder="Ej. 16"
+            />
+            <Campo
+              label="Nombre de la unidad"
+              valor={form.unidadNombre}
+              onChange={(v) => set('unidadNombre', v)}
+              placeholder="Ej. rebanada"
+            />
+          </div>
+        </div>
 
         <Campo
           label="Precio (€)"
@@ -209,10 +238,8 @@ export default function AnadirAlimento() {
             </div>
         </div>
 
-        <Selector
-          label="Supermercado"
+        <SupermercadoSelector
           valor={form.supermercado}
-          opciones={SUPERMERCADOS}
           onChange={(v) => set('supermercado', v)}
         />
         <Selector
@@ -255,7 +282,7 @@ export default function AnadirAlimento() {
   )
 }
 
-function Campo({ label, valor, onChange, placeholder, tipo = 'text' }) {
+function Campo({ label, valor, onChange, placeholder, tipo = 'text', ayuda }) {
   return (
     <div className="mb-2">
       <label className="block text-sm font-bold text-gray-600 mb-1.5 mt-2">
@@ -269,6 +296,7 @@ function Campo({ label, valor, onChange, placeholder, tipo = 'text' }) {
         placeholder={placeholder}
         className="w-full bg-white rounded-2xl px-4 py-3.5 text-gray-800 font-semibold shadow-card outline-none focus:ring-2 ring-brand-300 placeholder:text-gray-300 placeholder:font-normal"
       />
+      {ayuda && <p className="text-xs text-gray-400 font-semibold mt-1 px-1">{ayuda}</p>}
     </div>
   )
 }

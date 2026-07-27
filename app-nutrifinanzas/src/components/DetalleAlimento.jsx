@@ -24,6 +24,8 @@ export default function DetalleAlimento({ alimento, onCerrar }) {
   const [formDatos, setFormDatos] = useState({
     cantidad: alimento.cantidad || '',
     precio: alimento.precio ?? '',
+    pesoUnidadG: alimento.pesoUnidadG ?? '',
+    unidadNombre: alimento.unidadNombre || '',
   })
 
   const [form, setForm] = useState({
@@ -65,10 +67,32 @@ export default function DetalleAlimento({ alimento, onCerrar }) {
     setGuardandoDatos(true)
     setErrorDatos('')
     try {
+      const pesoUnidadG = aNumero(formDatos.pesoUnidadG)
+      const unidadNombre = formDatos.unidadNombre.trim() || null
       await actualizarAlimento(alimento.id, {
         cantidad: formDatos.cantidad.trim() || '1 ud',
         precio: aNumero(formDatos.precio) ?? 0,
+        peso_unidad_g: pesoUnidadG,
+        unidad_nombre: unidadNombre,
       })
+
+      // Si este alimento viene de un código de barras, completamos también
+      // el catálogo compartido con el peso por unidad recién guardado.
+      if (alimento.codigoBarras && pesoUnidadG != null) {
+        await guardarProductoEnCatalogo({
+          codigoBarras: alimento.codigoBarras,
+          nombre: alimento.nombre,
+          marca: alimento.marca,
+          kcal: alimento.kcal,
+          proteinas: alimento.proteinas,
+          hidratos: alimento.hidratos,
+          grasas: alimento.grasas,
+          categoria: alimento.categoria,
+          pesoUnidadG,
+          unidadNombre,
+        })
+      }
+
       setEditandoDatos(false)
     } catch (e) {
       console.error('Error guardando la cantidad/precio:', e)
@@ -164,6 +188,8 @@ export default function DetalleAlimento({ alimento, onCerrar }) {
                     setFormDatos({
                       cantidad: alimento.cantidad || '',
                       precio: alimento.precio ?? '',
+                      pesoUnidadG: alimento.pesoUnidadG ?? '',
+                      unidadNombre: alimento.unidadNombre || '',
                     })
                     setEditandoDatos(true)
                   }}
@@ -178,10 +204,10 @@ export default function DetalleAlimento({ alimento, onCerrar }) {
               <>
                 <div className="grid grid-cols-2 gap-2">
                   <CampoMacro
-                    label="Cantidad"
+                    label="Cantidad del envase"
                     valor={formDatos.cantidad}
                     onChange={(v) => setFormDatos((f) => ({ ...f, cantidad: v }))}
-                    placeholder="Ej. 4 ud, 500 g"
+                    placeholder="Ej. 4 ud, 450 g"
                     tipo="text"
                   />
                   <CampoMacro
@@ -189,6 +215,19 @@ export default function DetalleAlimento({ alimento, onCerrar }) {
                     valor={formDatos.precio}
                     onChange={(v) => setFormDatos((f) => ({ ...f, precio: v }))}
                     placeholder="5,80"
+                  />
+                  <CampoMacro
+                    label="Peso/unidad (g)"
+                    valor={formDatos.pesoUnidadG}
+                    onChange={(v) => setFormDatos((f) => ({ ...f, pesoUnidadG: v }))}
+                    placeholder="Ej. 16"
+                  />
+                  <CampoMacro
+                    label="Nombre unidad"
+                    valor={formDatos.unidadNombre}
+                    onChange={(v) => setFormDatos((f) => ({ ...f, unidadNombre: v }))}
+                    placeholder="Ej. rebanada"
+                    tipo="text"
                   />
                 </div>
 
@@ -217,10 +256,16 @@ export default function DetalleAlimento({ alimento, onCerrar }) {
               </>
             ) : (
               <div className="grid grid-cols-2 gap-2">
-                <Dato etiqueta="Cantidad" valor={alimento.cantidad || '—'} />
+                <Dato etiqueta="Cantidad del envase" valor={alimento.cantidad || '—'} />
                 <Dato etiqueta="Precio" valor={euros(alimento.precio)} />
                 <Dato etiqueta="Supermercado" valor={alimento.supermercado || '—'} />
                 <Dato etiqueta="Categoría" valor={alimento.categoria || '—'} />
+                {alimento.pesoUnidadG != null && (
+                  <Dato
+                    etiqueta="Peso por unidad"
+                    valor={`${alimento.pesoUnidadG} g${alimento.unidadNombre ? ` / ${alimento.unidadNombre}` : ''}`}
+                  />
+                )}
               </div>
             )}
           </div>

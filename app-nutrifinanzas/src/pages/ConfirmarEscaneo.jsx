@@ -2,9 +2,17 @@ import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, Check, Loader2, Trash2, AlertTriangle, ScanLine } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { CATEGORIAS, SUPERMERCADOS } from '../data/categorias.js'
+import { CATEGORIAS } from '../data/categorias.js'
 import EscanerNutricional from '../components/EscanerNutricional.jsx'
+import SupermercadoSelector from '../components/SupermercadoSelector.jsx'
 import { guardarProductoEnCatalogo } from '../lib/productos.js'
+
+// Convierte '' -> null y texto -> número (para peso por unidad)
+function aNumero(v) {
+  if (v === '' || v === null || v === undefined) return null
+  const n = Number(String(v).replace(',', '.'))
+  return Number.isFinite(n) ? n : null
+}
 
 // Bloque 3: muestra los alimentos que detectó la IA a partir del ticket o
 // producto escaneado, y deja editarlos antes de guardarlos todos en la
@@ -40,6 +48,8 @@ export default function ConfirmarEscaneo() {
       grasas: it.grasas ?? null,
       codigoBarras: it.codigoBarras || null,
       encontradoEnCatalogo: !!it.encontradoEnCatalogo,
+      pesoUnidadG: it.pesoUnidadG ?? null,
+      unidadNombre: it.unidadNombre || '',
     }))
   )
   const [guardando, setGuardando] = useState(false)
@@ -110,6 +120,8 @@ export default function ConfirmarEscaneo() {
             supermercado,
             categoria: it.categoria,
             codigoBarras: it.codigoBarras,
+            pesoUnidadG: it.pesoUnidadG,
+            unidadNombre: it.unidadNombre.trim() || null,
           },
           'escaner'
         )
@@ -127,6 +139,8 @@ export default function ConfirmarEscaneo() {
             hidratos: it.hidratos,
             grasas: it.grasas,
             categoria: it.categoria,
+            pesoUnidadG: it.pesoUnidadG,
+            unidadNombre: it.unidadNombre.trim() || null,
           })
         }
       }
@@ -155,20 +169,7 @@ export default function ConfirmarEscaneo() {
       </p>
 
       <div className="px-5 py-4">
-        <label className="block text-sm font-bold text-gray-600 mb-1.5">
-          Supermercado
-        </label>
-        <select
-          value={supermercado}
-          onChange={(e) => setSupermercado(e.target.value)}
-          className="w-full bg-white rounded-2xl px-4 py-3.5 text-gray-800 font-semibold shadow-card outline-none focus:ring-2 ring-brand-300 appearance-none mb-4"
-        >
-          {SUPERMERCADOS.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        <SupermercadoSelector valor={supermercado} onChange={setSupermercado} />
 
         <div className="space-y-3">
           {items.map((it) => (
@@ -206,7 +207,7 @@ export default function ConfirmarEscaneo() {
                 <input
                   value={it.cantidad}
                   onChange={(e) => set(it.idTmp, 'cantidad', e.target.value)}
-                  placeholder="Ej. 1 ud, 4 ud, 500 g"
+                  placeholder="Cantidad del envase: 1 ud, 450 g..."
                   className="bg-gray-50 rounded-xl px-3 py-2 text-sm text-gray-700 outline-none focus:ring-2 ring-brand-300"
                 />
                 <input
@@ -215,6 +216,23 @@ export default function ConfirmarEscaneo() {
                   value={it.precio}
                   onChange={(e) => set(it.idTmp, 'precio', e.target.value)}
                   placeholder="Precio €"
+                  className="bg-gray-50 rounded-xl px-3 py-2 text-sm text-gray-700 outline-none focus:ring-2 ring-brand-300"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={it.pesoUnidadG ?? ''}
+                  onChange={(e) => set(it.idTmp, 'pesoUnidadG', aNumero(e.target.value))}
+                  placeholder="Peso/unidad (g), opcional"
+                  className="bg-gray-50 rounded-xl px-3 py-2 text-sm text-gray-700 outline-none focus:ring-2 ring-brand-300"
+                />
+                <input
+                  value={it.unidadNombre}
+                  onChange={(e) => set(it.idTmp, 'unidadNombre', e.target.value)}
+                  placeholder="Ej. rebanada, huevo..."
                   className="bg-gray-50 rounded-xl px-3 py-2 text-sm text-gray-700 outline-none focus:ring-2 ring-brand-300"
                 />
               </div>

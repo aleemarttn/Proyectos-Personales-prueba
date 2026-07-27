@@ -3,6 +3,7 @@ dist
 .DS_Store
 *.local
 .vite
+.netlify
 
 # Variables de entorno (claves de Supabase, etc.) — NUNCA subir al repo
 .env

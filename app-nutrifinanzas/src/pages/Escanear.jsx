@@ -12,20 +12,13 @@ import {
   Barcode,
   Loader2,
   AlertTriangle,
+  Flashlight,
 } from 'lucide-react'
-import { BrowserMultiFormatReader } from '@zxing/browser'
-import { BarcodeFormat, DecodeHintType } from '@zxing/library'
 import { analizarImagen } from '../lib/ocr.js'
 import { comprimirImagen } from '../utils/imagen.js'
 import { consultarOpenFoodFacts } from '../lib/barcode.js'
 import { buscarProductoPorCodigoBarras } from '../lib/productos.js'
-
-const FORMATOS_BARRA = [
-  BarcodeFormat.EAN_13,
-  BarcodeFormat.EAN_8,
-  BarcodeFormat.UPC_A,
-  BarcodeFormat.UPC_E,
-]
+import { iniciarEscaner, traducirErrorCamara } from '../lib/escanerBarras.js'
 
 // Escáner real: selector de modo (ticket, producto suelto o código de
 // barras), captura con la CÁMARA NATIVA del sistema o galería para ticket/
@@ -38,7 +31,8 @@ const FORMATOS_BARRA = [
 // pequeño (ticket, etiqueta) hace falta el enfoque de la app de cámara
 // nativa. El código de barras es distinto: ahí sí usamos getUserMedia en
 // vivo (sin botón de disparo) porque decodificar un patrón de barras no
-// necesita ese enfoque fino y así el escaneo es instantáneo.
+// necesita ese enfoque fino y así el escaneo es instantáneo. El motor de
+// lectura vive en lib/escanerBarras.js.
 export default function Escanear() {
   const navigate = useNavigate()
   const [modo, setModo] = useState(null) // null | 'ticket' | 'producto' | 'codigo_barras'
@@ -123,6 +117,13 @@ export default function Escanear() {
     }
   }
 
+  // La cámara no ha podido abrirse (permiso denegado, en uso por otra app…).
+  const manejarErrorCamara = useCallback((e) => {
+    console.error('No se pudo acceder a la cámara:', e)
+    setErrorAnalisis(traducirErrorCamara(e))
+    setEstadoBarra('error_camara')
+  }, [])
+
   // Un código de barras se acaba de leer con la cámara en vivo. Primero
   // miramos el catálogo compartido en Supabase (instantáneo); si no está,
   // consultamos Open Food Facts para autocompletar sin pedir foto ni IA;
@@ -206,6 +207,7 @@ export default function Escanear() {
       {modo === 'codigo_barras' && estadoBarra === 'escaneando' && (
         <VisorCodigoBarras
           onDetectado={manejarCodigoDetectado}
+          onErrorCamara={manejarErrorCamara}
           onSinCodigo={() => {
             setCodigoBarrasPendiente(null)
             setModo('producto')
@@ -375,56 +377,73 @@ function SelectorFoto({ modo, error, aviso, onCamara, onGaleria }) {
 }
 
 // Visor en vivo del código de barras: cámara siempre encendida (sin botón
-// de disparo), decodificando cada fotograma hasta encontrar un EAN/UPC.
-function VisorCodigoBarras({ onDetectado, onSinCodigo }) {
+// de disparo), decodificando la banda central de cada fotograma hasta
+// encontrar un EAN/UPC. Toda la lógica de cámara y decodificación está en
+// lib/escanerBarras.js.
+function VisorCodigoBarras({ onDetectado, onSinCodigo, onErrorCamara }) {
   const videoRef = useRef(null)
+  const controlesRef = useRef(null)
+  const [linterna, setLinterna] = useState(false)
+  const [tieneLinterna, setTieneLinterna] = useState(false)
 
   useEffect(() => {
-    let activo = true
-    let controls
+    let desmontado = false
 
-    const hints = new Map()
-    hints.set(DecodeHintType.POSSIBLE_FORMATS, FORMATOS_BARRA)
-    const lector = new BrowserMultiFormatReader(hints)
-
-    lector
-      .decodeFromConstraints(
-        { video: { facingMode: 'environment' } },
-        videoRef.current,
-        (resultado) => {
-          if (resultado && activo) {
-            activo = false
-            controls?.stop()
-            onDetectado(resultado.getText())
-          }
-        }
-      )
-      .then((c) => {
-        controls = c
-        if (!activo) controls.stop() // ya se detectó o se desmontó antes de tener controles
-      })
-      .catch((e) => console.error('No se pudo acceder a la cámara:', e))
+    iniciarEscaner(videoRef.current, onDetectado, onErrorCamara).then((controles) => {
+      controlesRef.current = controles
+      if (desmontado) {
+        controles.detener()
+        return
+      }
+      setTieneLinterna(controles.tieneLinterna)
+    })
 
     return () => {
-      activo = false
-      controls?.stop()
+      desmontado = true
+      controlesRef.current?.detener()
     }
-  }, [onDetectado])
+  }, [onDetectado, onErrorCamara])
+
+  function alternarLinterna() {
+    const nueva = !linterna
+    setLinterna(nueva)
+    controlesRef.current?.alternarLinterna(nueva)
+  }
 
   return (
     <>
       <div className="absolute inset-0 bg-black">
-        <video ref={videoRef} muted playsInline className="w-full h-full object-cover" />
+        <video
+          ref={videoRef}
+          muted
+          playsInline
+          autoPlay
+          className="w-full h-full object-cover"
+        />
       </div>
 
+      {/* El recuadro guía marca la banda que realmente se decodifica
+          (RECORTE en lib/escanerBarras.js): lo que ves es lo que se lee. */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="relative w-72 h-36">
+        <div className="relative w-[92%] h-32">
           <Esquina clases="top-0 left-0 border-t-4 border-l-4 rounded-tl-2xl" />
           <Esquina clases="top-0 right-0 border-t-4 border-r-4 rounded-tr-2xl" />
           <Esquina clases="bottom-0 left-0 border-b-4 border-l-4 rounded-bl-2xl" />
           <Esquina clases="bottom-0 right-0 border-b-4 border-r-4 rounded-br-2xl" />
         </div>
       </div>
+
+      {tieneLinterna && (
+        <button
+          onClick={alternarLinterna}
+          className={`absolute top-5 left-5 z-20 w-10 h-10 rounded-full backdrop-blur flex items-center justify-center active:scale-95 transition ${
+            linterna ? 'bg-white text-gray-900' : 'bg-white/15 text-white'
+          }`}
+          aria-label="Linterna"
+        >
+          <Flashlight size={20} />
+        </button>
+      )}
 
       <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/70 to-transparent">
         <p className="text-white/80 font-semibold mb-4 text-center flex items-center justify-center gap-2">

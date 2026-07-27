@@ -15,7 +15,8 @@ export function colorCategoria(id) {
   return c ? c.color : '#94a3b8'
 }
 
-// Lista de supermercados habituales en España
+// Lista de supermercados habituales en España (respaldo mientras carga la
+// lista comunitaria real desde Supabase; ver lib/supermercados.js).
 export const SUPERMERCADOS = [
   'Mercadona',
   'Carrefour',
@@ -24,4 +25,6 @@ export const SUPERMERCADOS = [
   'Alcampo',
   'Consum',
   'Eroski',
+  'Hiperdino',
+  'Unide',
 ]

@@ -27,6 +27,8 @@ function filaAAlimento(fila) {
     fecha: fila.fecha,
     origen: fila.origen,
     codigoBarras: fila.codigo_barras,
+    pesoUnidadG: fila.peso_unidad_g === null ? null : Number(fila.peso_unidad_g),
+    unidadNombre: fila.unidad_nombre,
   }
 }
 
@@ -86,6 +88,8 @@ export function AppProvider({ children }) {
       categoria: alimento.categoria,
       origen,
       codigo_barras: alimento.codigoBarras || null,
+      peso_unidad_g: alimento.pesoUnidadG ?? null,
+      unidad_nombre: alimento.unidadNombre || null,
     }
 
     const { data, error: err } = await supabase
@@ -105,7 +109,7 @@ export function AppProvider({ children }) {
   // `cambios` usa las claves de las pantallas (kcal, proteinas, hidratos, grasas…).
   async function actualizarAlimento(id, cambios) {
     // Solo mandamos a la BD las columnas que de verdad vienen en `cambios`
-    const columnas = ['kcal', 'proteinas', 'hidratos', 'grasas', 'nombre', 'marca', 'cantidad', 'precio', 'supermercado', 'categoria']
+    const columnas = ['kcal', 'proteinas', 'hidratos', 'grasas', 'nombre', 'marca', 'cantidad', 'precio', 'supermercado', 'categoria', 'peso_unidad_g', 'unidad_nombre']
     const fila = {}
     for (const c of columnas) {
       if (c in cambios) fila[c] = cambios[c]

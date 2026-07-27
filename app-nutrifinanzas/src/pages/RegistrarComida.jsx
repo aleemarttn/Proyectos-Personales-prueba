@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
   Check,
@@ -12,6 +12,7 @@ import {
 import { useApp } from '../context/AppContext.jsx'
 import { useDiario } from '../context/DiarioContext.jsx'
 import { buscarProductosPorNombre } from '../lib/productos.js'
+import { comidaSugeridaPorHora } from '../lib/comidas.js'
 
 const TABS = [
   { id: 'despensa', label: 'Despensa' },
@@ -31,14 +32,31 @@ function aNumero(v) {
 // compartido (por nombre), o macros escritos a mano.
 export default function RegistrarComida() {
   const navigate = useNavigate()
+  const [params] = useSearchParams()
   const { alimentos } = useApp()
-  const { agregarRegistro } = useDiario()
+  const { agregarRegistro, comidas } = useDiario()
 
   const [tab, setTab] = useState('despensa')
+
+  // A qué comida del día se registra. Si venimos del botón "+ Añadir" de
+  // una comida concreta del diario llega en la URL; si no, se propone la
+  // más probable según la hora.
+  const [comidaId, setComidaId] = useState(params.get('comida') || null)
+
+  // Las comidas llegan de forma asíncrona: en cuanto están, si no había
+  // ninguna elegida (ni por URL) proponemos la de la hora actual.
+  useEffect(() => {
+    if (comidaId || comidas.length === 0) return
+    setComidaId(comidaSugeridaPorHora(comidas)?.id ?? null)
+  }, [comidas, comidaId])
 
   // Selección de despensa/catálogo + cantidad consumida
   const [seleccionado, setSeleccionado] = useState(null)
   const [cantidadG, setCantidadG] = useState('')
+  // Si el alimento tiene peso por unidad guardado, se puede registrar por
+  // unidades (ej. "3 rebanadas") en vez de pesar cada vez.
+  const [modoCantidad, setModoCantidad] = useState('gramos') // 'gramos' | 'unidades'
+  const [unidades, setUnidades] = useState('')
 
   // Búsqueda en el catálogo compartido
   const [busqueda, setBusqueda] = useState('')
@@ -61,9 +79,18 @@ export default function RegistrarComida() {
 
   function cambiarTab(nuevo) {
     setTab(nuevo)
-    setSeleccionado(null)
-    setCantidadG('')
+    elegir(null)
     setError('')
+  }
+
+  // Selecciona un alimento/producto y resetea la cantidad: por defecto en
+  // unidades si tiene peso por unidad guardado (es lo más rápido), si no en
+  // gramos.
+  function elegir(item) {
+    setSeleccionado(item)
+    setCantidadG('')
+    setUnidades('')
+    setModoCantidad(item?.pesoUnidadG ? 'unidades' : 'gramos')
   }
 
   async function buscarEnCatalogo() {
@@ -80,7 +107,13 @@ export default function RegistrarComida() {
     }
   }
 
-  const cantidadNum = aNumero(cantidadG)
+  const unidadesNum = aNumero(unidades)
+  const cantidadNum =
+    modoCantidad === 'unidades' && seleccionado?.pesoUnidadG
+      ? unidadesNum != null
+        ? unidadesNum * seleccionado.pesoUnidadG
+        : null
+      : aNumero(cantidadG)
   const cantidadValida = cantidadNum != null && cantidadNum > 0
   const sinKcal = seleccionado && (seleccionado.kcal === null || seleccionado.kcal === undefined)
 
@@ -93,6 +126,8 @@ export default function RegistrarComida() {
           grasas: seleccionado.grasas != null ? (seleccionado.grasas * cantidadNum) / 100 : null,
         }
       : null
+
+  const comidaElegida = comidas.find((c) => c.id === comidaId) || null
 
   const validoOrigen = tab !== 'manual' && !!seleccionado && cantidadValida && !sinKcal
   const validoManual = tab === 'manual' && manual.nombre.trim() && manual.kcal !== ''
@@ -112,6 +147,7 @@ export default function RegistrarComida() {
             proteinas: aNumero(manual.proteinas),
             hidratos: aNumero(manual.hidratos),
             grasas: aNumero(manual.grasas),
+            comidaId,
           },
           'manual'
         )
@@ -126,6 +162,7 @@ export default function RegistrarComida() {
             grasas: preview.grasas,
             alimentoId: tab === 'despensa' ? seleccionado.id : null,
             codigoBarras: tab === 'catalogo' ? seleccionado.codigoBarras : null,
+            comidaId,
           },
           tab
         )
@@ -146,7 +183,11 @@ export default function RegistrarComida() {
           <CheckCircle2 size={44} />
         </div>
         <h2 className="text-2xl font-black text-gray-800">¡Registrado!</h2>
-        <p className="text-gray-500 mt-1">Ya está en tu diario de hoy.</p>
+        <p className="text-gray-500 mt-1">
+          {comidaElegida
+            ? `Añadido a "${comidaElegida.nombre}".`
+            : 'Ya está en tu diario de hoy.'}
+        </p>
       </div>
     )
   }
@@ -164,8 +205,30 @@ export default function RegistrarComida() {
         <h1 className="text-xl font-black text-gray-800">Registrar comida</h1>
       </div>
 
+      {/* A qué comida del día va */}
+      {comidas.length > 0 && (
+        <div className="px-5 mt-4">
+          <p className="text-sm font-bold text-gray-600 mb-2">¿En qué comida?</p>
+          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+            {comidas.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => setComidaId(c.id)}
+                className={`px-4 py-2.5 rounded-xl font-bold text-sm shrink-0 transition ${
+                  comidaId === c.id
+                    ? 'bg-brand-500 text-white shadow-soft'
+                    : 'bg-white text-gray-500 shadow-card'
+                }`}
+              >
+                {c.nombre}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Pestañas de origen */}
-      <div className="px-5 mt-3 flex gap-2">
+      <div className="px-5 mt-4 flex gap-2">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -190,7 +253,7 @@ export default function RegistrarComida() {
                 key={a.id}
                 item={a}
                 seleccionado={seleccionado?.id === a.id}
-                onClick={() => setSeleccionado(a)}
+                onClick={() => elegir(a)}
               />
             ))}
           </div>
@@ -220,7 +283,7 @@ export default function RegistrarComida() {
                   key={p.codigoBarras}
                   item={p}
                   seleccionado={seleccionado?.codigoBarras === p.codigoBarras}
-                  onClick={() => setSeleccionado(p)}
+                  onClick={() => elegir(p)}
                 />
               ))}
             </div>
@@ -236,19 +299,53 @@ export default function RegistrarComida() {
               </p>
             ) : (
               <>
-                <Campo
-                  label="Cantidad consumida (g)"
-                  tipo="number"
-                  valor={cantidadG}
-                  onChange={setCantidadG}
-                  placeholder="Ej. 150"
-                />
+                {seleccionado.pesoUnidadG ? (
+                  <>
+                    <div className="flex gap-2 mb-1">
+                      <TabModo
+                        activo={modoCantidad === 'unidades'}
+                        onClick={() => setModoCantidad('unidades')}
+                      >
+                        {seleccionado.unidadNombre ? `${seleccionado.unidadNombre}s` : 'Unidades'}
+                      </TabModo>
+                      <TabModo activo={modoCantidad === 'gramos'} onClick={() => setModoCantidad('gramos')}>
+                        Gramos
+                      </TabModo>
+                    </div>
+                    {modoCantidad === 'unidades' ? (
+                      <Campo
+                        label={`Cuántas unidades de "${seleccionado.unidadNombre || 'ud'}" (${seleccionado.pesoUnidadG} g cada una)`}
+                        tipo="number"
+                        valor={unidades}
+                        onChange={setUnidades}
+                        placeholder="Ej. 3"
+                      />
+                    ) : (
+                      <Campo
+                        label="Cantidad consumida (g)"
+                        tipo="number"
+                        valor={cantidadG}
+                        onChange={setCantidadG}
+                        placeholder="Ej. 150"
+                      />
+                    )}
+                  </>
+                ) : (
+                  <Campo
+                    label="Cantidad consumida (g)"
+                    tipo="number"
+                    valor={cantidadG}
+                    onChange={setCantidadG}
+                    placeholder="Ej. 150"
+                  />
+                )}
                 {preview && (
                   <div className="flex items-center gap-2 bg-brand-50 text-brand-700 font-bold rounded-xl px-4 py-2.5 text-sm">
                     <Flame size={16} /> {Math.round(preview.kcal)} kcal
                     {preview.proteinas != null && ` · P ${Math.round(preview.proteinas)}g`}
                     {preview.hidratos != null && ` · H ${Math.round(preview.hidratos)}g`}
                     {preview.grasas != null && ` · G ${Math.round(preview.grasas)}g`}
+                    {modoCantidad === 'unidades' && ` · ${Math.round(cantidadNum)} g en total`}
                   </div>
                 )}
               </>
@@ -343,6 +440,20 @@ function OpcionAlimento({ item, seleccionado, onClick }) {
         </p>
       </div>
       {seleccionado && <Check size={18} className="text-brand-500 shrink-0" />}
+    </button>
+  )
+}
+
+function TabModo({ activo, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex-1 py-2 rounded-xl font-bold text-xs transition ${
+        activo ? 'bg-brand-500 text-white shadow-soft' : 'bg-white text-gray-500 shadow-card'
+      }`}
+    >
+      {children}
     </button>
   )
 }

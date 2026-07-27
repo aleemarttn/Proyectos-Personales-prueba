@@ -15,6 +15,7 @@ import {
   LogOut,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
+import EditorComidas from '../components/EditorComidas.jsx'
 
 // Pantalla de Perfil: muestra los datos del onboarding y, si el perfil es
 // "Control total", también los objetivos de macros.
@@ -74,6 +75,9 @@ export default function Perfil() {
           />
         </div>
       </div>
+
+      {/* Comidas del día (editables, máximo 7) */}
+      <EditorComidas />
 
       {/* Macros (solo control total) */}
       {esControlTotal && (
