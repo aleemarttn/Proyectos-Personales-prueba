@@ -147,6 +147,11 @@ export default function Escanear() {
                   hidratos: delCatalogo.hidratos,
                   grasas: delCatalogo.grasas,
                   codigoBarras: delCatalogo.codigoBarras,
+                  // Lo que ya aportó la comunidad: sin esto se perdía y
+                  // había que volver a escribirlo en cada escaneo.
+                  pesoUnidadG: delCatalogo.pesoUnidadG,
+                  unidadNombre: delCatalogo.unidadNombre,
+                  unidadMedida: delCatalogo.unidadMedida,
                   encontradoEnCatalogo: true,
                 },
               ],
@@ -165,12 +170,16 @@ export default function Escanear() {
                   nombre: deOpenFoodFacts.nombre,
                   marca: deOpenFoodFacts.marca,
                   precio: null,
+                  // Cantidad del envase tal como la publica Open Food
+                  // Facts ("330 ml", "1 kg"): de ahí sale también la unidad.
+                  cantidad: deOpenFoodFacts.cantidad,
                   categoria_sugerida: deOpenFoodFacts.categoria,
                   kcal: deOpenFoodFacts.kcal,
                   proteinas: deOpenFoodFacts.proteinas,
                   hidratos: deOpenFoodFacts.hidratos,
                   grasas: deOpenFoodFacts.grasas,
                   codigoBarras: codigo,
+                  unidadMedida: deOpenFoodFacts.unidadMedida,
                   encontradoEnCatalogo: false,
                 },
               ],

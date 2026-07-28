@@ -38,7 +38,7 @@ export default function ConfirmarEscaneo() {
       nombre: it.nombre || '',
       marca: it.marca || '',
       precio: it.precio ?? '',
-      cantidad: '1 ud',
+      cantidad: it.cantidad || '1 ud',
       categoria: CATEGORIAS.some((c) => c.id === it.categoria_sugerida)
         ? it.categoria_sugerida
         : 'Otros',
