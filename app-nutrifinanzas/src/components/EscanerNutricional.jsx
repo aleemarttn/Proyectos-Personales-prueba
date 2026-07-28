@@ -75,7 +75,7 @@ export default function EscanerNutricional({ onCerrar, onDetectado }) {
     <div className="fixed inset-0 z-50 bg-gray-900 text-white overflow-hidden animate-fade-in">
       <button
         onClick={onCerrar}
-        className="absolute top-5 right-5 z-20 w-10 h-10 rounded-full bg-white/15 backdrop-blur flex items-center justify-center active:scale-95 transition"
+        className="absolute top-[calc(env(safe-area-inset-top)+1.25rem)] right-5 z-20 w-11 h-11 rounded-full bg-white/15 backdrop-blur flex items-center justify-center active:scale-95 transition"
       >
         <X size={22} />
       </button>
@@ -121,7 +121,7 @@ export default function EscanerNutricional({ onCerrar, onDetectado }) {
             <img src={imagen} alt="Etiqueta capturada" className="w-full h-full object-contain" />
           </div>
 
-          <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 to-transparent space-y-3">
+          <div className="absolute bottom-0 left-0 right-0 p-6 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] bg-gradient-to-t from-black/80 to-transparent space-y-3">
             {error && (
               <div className="bg-amber-500/15 text-amber-300 text-sm font-semibold rounded-xl px-4 py-3 flex items-start gap-2">
                 <AlertTriangle size={18} className="shrink-0 mt-0.5" />

@@ -49,7 +49,7 @@ export default function Diario() {
   return (
     <div className="bg-cream min-h-full animate-fade-in">
       {/* Cabecera */}
-      <div className="px-5 pt-7 pb-4">
+      <div className="px-5 pt-[calc(env(safe-area-inset-top)+1.75rem)] pb-4">
         <p className="text-gray-400 font-semibold">Hoy</p>
         <h1 className="text-2xl font-black text-gray-800">Tu diario</h1>
       </div>

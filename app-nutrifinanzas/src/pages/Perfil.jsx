@@ -46,7 +46,7 @@ export default function Perfil() {
   return (
     <div className="bg-cream min-h-full animate-fade-in pb-6">
       {/* Cabecera con avatar */}
-      <div className="px-5 pt-8 pb-5 flex flex-col items-center text-center">
+      <div className="px-5 pt-[calc(env(safe-area-inset-top)+2rem)] pb-5 flex flex-col items-center text-center">
         <div className="w-20 h-20 rounded-full bg-brand-500 text-white flex items-center justify-center text-3xl font-black shadow-soft mb-3">
           {perfil.nombre.charAt(0).toUpperCase()}
         </div>

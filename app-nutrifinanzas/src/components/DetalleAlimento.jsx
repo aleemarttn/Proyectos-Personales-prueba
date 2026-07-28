@@ -146,7 +146,7 @@ export default function DetalleAlimento({ alimento, onCerrar }) {
         aria-label="Cerrar"
       />
 
-      <div className="relative w-full bg-cream rounded-t-3xl max-h-[88%] overflow-y-auto no-scrollbar animate-slide-up pb-8">
+      <div className="relative w-full bg-cream rounded-t-3xl max-h-[88%] overflow-y-auto no-scrollbar animate-slide-up pb-[calc(env(safe-area-inset-bottom)+2rem)]">
         {/* Cabecera */}
         <div className="sticky top-0 bg-cream px-5 pt-4 pb-3 flex items-start justify-between">
           <div className="flex items-center gap-3 min-w-0">

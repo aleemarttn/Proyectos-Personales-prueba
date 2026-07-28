@@ -154,7 +154,7 @@ export default function ConfirmarEscaneo() {
 
   return (
     <div className="bg-cream min-h-full animate-fade-in">
-      <div className="px-5 pt-6 pb-2 flex items-center gap-3">
+      <div className="px-5 pt-[calc(env(safe-area-inset-top)+1.5rem)] pb-2 flex items-center gap-3">
         <button
           onClick={() => navigate('/escanear')}
           className="w-10 h-10 rounded-full bg-white shadow-card flex items-center justify-center text-gray-600 active:scale-95 transition"
@@ -168,7 +168,7 @@ export default function ConfirmarEscaneo() {
         Revisa y corrige antes de guardar en tu despensa.
       </p>
 
-      <div className="px-5 py-4">
+      <div className="px-5 pt-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
         <SupermercadoSelector valor={supermercado} onChange={setSupermercado} />
 
         <div className="space-y-3">

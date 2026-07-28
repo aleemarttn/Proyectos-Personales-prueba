@@ -40,7 +40,7 @@ export default function Registro() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-cream animate-fade-in px-7 py-10">
+    <div className="flex flex-col h-full overflow-y-auto no-scrollbar bg-cream animate-fade-in px-7 pt-[calc(env(safe-area-inset-top)+2.5rem)] pb-[calc(env(safe-area-inset-bottom)+2.5rem)]">
       <div className="flex-1 flex flex-col justify-center">
         <div className="w-16 h-16 rounded-2xl bg-brand-500 text-white flex items-center justify-center mb-6 animate-pop">
           <Leaf size={32} strokeWidth={2.2} />

@@ -114,7 +114,7 @@ export default function AnadirAlimento() {
   return (
     <div className="bg-cream min-h-full animate-fade-in">
       {/* Cabecera */}
-      <div className="px-5 pt-6 pb-2 flex items-center gap-3">
+      <div className="px-5 pt-[calc(env(safe-area-inset-top)+1.5rem)] pb-2 flex items-center gap-3">
         <button
           onClick={() => navigate(-1)}
           className="w-10 h-10 rounded-full bg-white shadow-card flex items-center justify-center text-gray-600 active:scale-95 transition"

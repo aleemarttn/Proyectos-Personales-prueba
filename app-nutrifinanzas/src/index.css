@@ -7,14 +7,82 @@ html,
 body {
   margin: 0;
   padding: 0;
+  height: 100%;
   background: #e8eae6;
   font-family: 'Nunito', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  /* Evita que iOS agrande el texto al girar el móvil */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* Nada de "tirar para recargar" ni rebote de la página entera */
+  overscroll-behavior-y: none;
+}
+
+/* La página en sí no se desplaza: solo lo hacen las zonas de contenido.
+   (Sin position:fixed, para que el teclado del móvil siga pudiendo
+   desplazar el campo enfocado hasta dejarlo a la vista.) */
+html,
+body {
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
 }
 
 /* Quitamos el resaltado azul al tocar en móvil */
 * {
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Scroll suave (inercia) en iOS dentro de las zonas desplazables */
+.no-scrollbar,
+.overflow-y-auto,
+.overflow-auto {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* En pantallas táctiles, los campos nunca bajan de 16px: por debajo de ese
+   tamaño Safari hace zoom automático al enfocarlos y descoloca la pantalla. */
+@media (pointer: coarse) {
+  input:not([type='range']):not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+}
+
+/* Sin selección accidental de texto al mantener pulsado en la interfaz,
+   pero sí en el contenido normal. */
+button,
+a,
+nav,
+label {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Zonas seguras del móvil (notch arriba, barra de gestos abajo) */
+@layer utilities {
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .mb-safe {
+    margin-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .px-safe {
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+  /* Área mínima táctil recomendada (44px) */
+  .tap-target {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 
 /* Animaciones reutilizables */

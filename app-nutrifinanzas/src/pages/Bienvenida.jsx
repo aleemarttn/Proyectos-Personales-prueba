@@ -9,7 +9,7 @@ export default function Bienvenida() {
   const perfilCompleto = !!perfil?.tipo
 
   return (
-    <div className="flex flex-col h-full bg-gradient-to-b from-brand-500 to-brand-700 text-white px-7 py-10 animate-fade-in">
+    <div className="flex flex-col h-full bg-gradient-to-b from-brand-500 to-brand-700 text-white px-7 pt-[calc(env(safe-area-inset-top)+2.5rem)] pb-[calc(env(safe-area-inset-bottom)+2.5rem)] animate-fade-in">
       <div className="flex-1 flex flex-col justify-center">
         <div className="w-20 h-20 rounded-3xl bg-white/15 backdrop-blur flex items-center justify-center mb-7 animate-pop">
           <Leaf size={42} strokeWidth={2.2} />

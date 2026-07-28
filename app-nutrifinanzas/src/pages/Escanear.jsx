@@ -197,7 +197,7 @@ export default function Escanear() {
     <div className="relative h-full bg-gray-900 text-white overflow-hidden animate-fade-in">
       <button
         onClick={cerrar}
-        className="absolute top-5 right-5 z-20 w-10 h-10 rounded-full bg-white/15 backdrop-blur flex items-center justify-center active:scale-95 transition"
+        className="absolute top-[calc(env(safe-area-inset-top)+1.25rem)] right-5 z-20 w-11 h-11 rounded-full bg-white/15 backdrop-blur flex items-center justify-center active:scale-95 transition"
       >
         <X size={22} />
       </button>
@@ -436,7 +436,7 @@ function VisorCodigoBarras({ onDetectado, onSinCodigo, onErrorCamara }) {
       {tieneLinterna && (
         <button
           onClick={alternarLinterna}
-          className={`absolute top-5 left-5 z-20 w-10 h-10 rounded-full backdrop-blur flex items-center justify-center active:scale-95 transition ${
+          className={`absolute top-[calc(env(safe-area-inset-top)+1.25rem)] left-5 z-20 w-11 h-11 rounded-full backdrop-blur flex items-center justify-center active:scale-95 transition ${
             linterna ? 'bg-white text-gray-900' : 'bg-white/15 text-white'
           }`}
           aria-label="Linterna"
@@ -445,7 +445,7 @@ function VisorCodigoBarras({ onDetectado, onSinCodigo, onErrorCamara }) {
         </button>
       )}
 
-      <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/70 to-transparent">
+      <div className="absolute bottom-0 left-0 right-0 p-6 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] bg-gradient-to-t from-black/70 to-transparent">
         <p className="text-white/80 font-semibold mb-4 text-center flex items-center justify-center gap-2">
           <Barcode size={18} /> Apunta al código de barras del producto
         </p>
@@ -516,7 +516,7 @@ function Previsualizacion({
         <img src={imagen} alt="Foto capturada" className="w-full h-full object-contain" />
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 to-transparent space-y-3">
+      <div className="absolute bottom-0 left-0 right-0 p-6 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] bg-gradient-to-t from-black/80 to-transparent space-y-3">
         {error && (
           <div className="bg-amber-500/15 text-amber-300 text-sm font-semibold rounded-xl px-4 py-3 flex items-start gap-2">
             <AlertTriangle size={18} className="shrink-0 mt-0.5" />

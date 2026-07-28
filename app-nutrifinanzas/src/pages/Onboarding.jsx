@@ -70,7 +70,7 @@ export default function Onboarding() {
   return (
     <div className="flex flex-col h-full bg-cream animate-fade-in">
       {/* Cabecera con botón atrás y progreso */}
-      <div className="px-5 pt-6 pb-2 flex items-center gap-3">
+      <div className="px-5 pt-[calc(env(safe-area-inset-top)+1.5rem)] pb-2 flex items-center gap-3">
         <button
           onClick={() => (paso === 1 ? navigate('/') : setPaso(paso - 1))}
           className="w-10 h-10 rounded-full bg-white shadow-card flex items-center justify-center text-gray-600 active:scale-95 transition"
@@ -89,7 +89,7 @@ export default function Onboarding() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto no-scrollbar px-6 pb-6">
+      <div className="flex-1 overflow-y-auto no-scrollbar px-6 pb-[calc(env(safe-area-inset-bottom)+1.5rem)]">
         {/* ---------- PASO 1: elegir vía ---------- */}
         {paso === 1 && (
           <div className="animate-slide-up">

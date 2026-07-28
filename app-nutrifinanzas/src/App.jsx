@@ -1,23 +1,28 @@
+import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from './context/AuthContext.jsx'
 import PhoneFrame from './components/PhoneFrame.jsx'
 import BottomNav from './components/BottomNav.jsx'
+import InstalarApp from './components/InstalarApp.jsx'
 
-// Pantallas
+// Pantallas de entrada: van en el paquete inicial porque son lo primero que se ve
 import Bienvenida from './pages/Bienvenida.jsx'
 import Login from './pages/Login.jsx'
 import Registro from './pages/Registro.jsx'
-import Onboarding from './pages/Onboarding.jsx'
-import Despensa from './pages/Despensa.jsx'
-import Diario from './pages/Diario.jsx'
-import RegistrarComida from './pages/RegistrarComida.jsx'
-import AnadirAlimento from './pages/AnadirAlimento.jsx'
-import Escanear from './pages/Escanear.jsx'
-import ConfirmarEscaneo from './pages/ConfirmarEscaneo.jsx'
-import Gastos from './pages/Gastos.jsx'
-import Recetas from './pages/Recetas.jsx'
-import Perfil from './pages/Perfil.jsx'
+
+// El resto se descarga solo al entrar en cada pantalla, para que la app
+// abra rápido con datos móviles (el escáner y las gráficas pesan bastante).
+const Onboarding = lazy(() => import('./pages/Onboarding.jsx'))
+const Despensa = lazy(() => import('./pages/Despensa.jsx'))
+const Diario = lazy(() => import('./pages/Diario.jsx'))
+const RegistrarComida = lazy(() => import('./pages/RegistrarComida.jsx'))
+const AnadirAlimento = lazy(() => import('./pages/AnadirAlimento.jsx'))
+const Escanear = lazy(() => import('./pages/Escanear.jsx'))
+const ConfirmarEscaneo = lazy(() => import('./pages/ConfirmarEscaneo.jsx'))
+const Gastos = lazy(() => import('./pages/Gastos.jsx'))
+const Recetas = lazy(() => import('./pages/Recetas.jsx'))
+const Perfil = lazy(() => import('./pages/Perfil.jsx'))
 
 export default function App() {
   const { sesion, perfil, cargando } = useAuth()
@@ -35,9 +40,7 @@ export default function App() {
   if (cargando) {
     return (
       <PhoneFrame>
-        <div className="flex-1 flex items-center justify-center bg-cream">
-          <Loader2 className="animate-spin text-brand-500" size={32} />
-        </div>
+        <Cargando />
       </PhoneFrame>
     )
   }
@@ -45,6 +48,7 @@ export default function App() {
   return (
     <PhoneFrame>
       <div className="flex-1 overflow-y-auto no-scrollbar">
+        <Suspense fallback={<Cargando />}>
         <Routes>
           {/* Públicas */}
           <Route path="/" element={<Bienvenida />} />
@@ -81,10 +85,21 @@ export default function App() {
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
       </div>
 
+      <InstalarApp conBarra={mostrarBarra} />
       {mostrarBarra && <BottomNav />}
     </PhoneFrame>
+  )
+}
+
+// Pantalla de espera mientras se carga la sesión o el trozo de código de la ruta.
+function Cargando() {
+  return (
+    <div className="flex-1 h-full flex items-center justify-center bg-cream">
+      <Loader2 className="animate-spin text-brand-500" size={32} />
+    </div>
   )
 }
 

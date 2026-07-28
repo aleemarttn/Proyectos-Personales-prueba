@@ -12,13 +12,17 @@ const items = [
 
 export default function BottomNav() {
   return (
-    <nav className="shrink-0 bg-white border-t border-gray-100 px-2 pt-2 pb-3 flex justify-around">
+    <nav
+      className="shrink-0 bg-white border-t border-gray-100 px-2 pt-2 flex justify-around"
+      // Deja hueco para la barra de gestos del móvil (mínimo 0.75rem)
+      style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+    >
       {items.map(({ to, icon: Icon, label }) => (
         <NavLink
           key={to}
           to={to}
           className={({ isActive }) =>
-            `flex flex-col items-center gap-1 px-3 py-1 rounded-xl transition-colors ${
+            `flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] py-1 rounded-xl transition-colors ${
               isActive ? 'text-brand-600' : 'text-gray-400'
             }`
           }
