@@ -6,6 +6,8 @@ import { CATEGORIAS } from '../data/categorias.js'
 import EscanerNutricional from '../components/EscanerNutricional.jsx'
 import SupermercadoSelector from '../components/SupermercadoSelector.jsx'
 import { guardarProductoEnCatalogo } from '../lib/productos.js'
+import SelectorUnidad from '../components/SelectorUnidad.jsx'
+import { adivinarUnidad } from '../utils/unidades.js'
 
 // Convierte '' -> null y texto -> número (para peso por unidad)
 function aNumero(v) {
@@ -51,6 +53,9 @@ export default function ConfirmarEscaneo() {
       encontradoEnCatalogo: !!it.encontradoEnCatalogo,
       pesoUnidadG: it.pesoUnidadG ?? null,
       unidadNombre: it.unidadNombre || '',
+      // Sólido o líquido: si no viene decidido, se deduce del envase
+      // ("330 ml" -> ml) y si no, gramos.
+      unidadMedida: it.unidadMedida || adivinarUnidad(it.cantidad),
     }))
   )
   const [guardando, setGuardando] = useState(false)
@@ -123,6 +128,7 @@ export default function ConfirmarEscaneo() {
             codigoBarras: it.codigoBarras,
             pesoUnidadG: it.pesoUnidadG,
             unidadNombre: it.unidadNombre.trim() || null,
+            unidadMedida: it.unidadMedida,
           },
           'escaner'
         )
@@ -142,6 +148,7 @@ export default function ConfirmarEscaneo() {
             categoria: it.categoria,
             pesoUnidadG: it.pesoUnidadG,
             unidadNombre: it.unidadNombre.trim() || null,
+            unidadMedida: it.unidadMedida,
           })
         }
       }
@@ -221,13 +228,24 @@ export default function ConfirmarEscaneo() {
                 />
               </div>
 
+              <div className="flex items-center justify-between gap-3 bg-gray-50 rounded-xl px-3 py-2 mb-2">
+                <span className="text-xs text-gray-500 font-bold">
+                  Se mide en
+                </span>
+                <SelectorUnidad
+                  valor={it.unidadMedida}
+                  onChange={(u) => set(it.idTmp, 'unidadMedida', u)}
+                  size="compacto"
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-2 mb-2">
                 <input
                   type="number"
                   inputMode="decimal"
                   value={it.pesoUnidadG ?? ''}
                   onChange={(e) => set(it.idTmp, 'pesoUnidadG', aNumero(e.target.value))}
-                  placeholder="Peso/unidad (g), opcional"
+                  placeholder={`Peso/unidad (${it.unidadMedida}), opcional`}
                   className="bg-gray-50 rounded-xl px-3 py-2 text-sm text-gray-700 outline-none focus:ring-2 ring-brand-300"
                 />
                 <input
@@ -328,5 +346,5 @@ function resumenMacros(it) {
   if (it.proteinas != null) partes.push(`P ${it.proteinas}`)
   if (it.hidratos != null) partes.push(`H ${it.hidratos}`)
   if (it.grasas != null) partes.push(`G ${it.grasas}`)
-  return partes.join(' · ') + ' /100g'
+  return `${partes.join(' · ')} /100 ${it.unidadMedida === 'ml' ? 'ml' : 'g'}`
 }

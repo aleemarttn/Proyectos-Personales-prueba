@@ -6,6 +6,8 @@
 // primero porque es instantáneo y ya trae los macros tal como los guardó
 // la comunidad.
 
+import { adivinarUnidad } from '../utils/unidades.js'
+
 const CAMPOS = 'product_name,generic_name,brands,nutriments,categories_tags,quantity,status'
 
 const REGLAS_CATEGORIA = [
@@ -76,6 +78,8 @@ export async function consultarOpenFoodFacts(codigo) {
     nombre,
     marca,
     cantidad: producto.quantity?.trim() || '',
+    // Una bebida viene como "330 ml" o "1,5 L": se mide en mililitros.
+    unidadMedida: adivinarUnidad(producto.quantity),
     kcal: Math.round(kcal),
     proteinas: numeroValido(nutrientes.proteins_100g),
     hidratos: numeroValido(nutrientes.carbohydrates_100g),

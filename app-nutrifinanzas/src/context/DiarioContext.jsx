@@ -19,6 +19,8 @@ function filaARegistro(fila) {
     id: fila.id,
     nombre: fila.nombre,
     cantidadG: Number(fila.cantidad_g),
+    // 'g' o 'ml': se copia del alimento al registrarlo (migración 008)
+    unidadMedida: fila.unidad_medida || 'g',
     kcal: Number(fila.kcal),
     proteinas: fila.proteinas === null ? null : Number(fila.proteinas),
     hidratos: fila.hidratos === null ? null : Number(fila.hidratos),
@@ -134,6 +136,7 @@ export function DiarioProvider({ children }) {
       comida_id: registro.comidaId || null,
       nombre: registro.nombre,
       cantidad_g: registro.cantidadG,
+      unidad_medida: registro.unidadMedida === 'ml' ? 'ml' : 'g',
       kcal: registro.kcal,
       proteinas: registro.proteinas ?? null,
       hidratos: registro.hidratos ?? null,

@@ -28,6 +28,7 @@ export async function buscarProductoPorCodigoBarras(codigoBarras) {
     categoria: data.categoria,
     pesoUnidadG: data.peso_unidad_g === null ? null : Number(data.peso_unidad_g),
     unidadNombre: data.unidad_nombre,
+    unidadMedida: data.unidad_medida || 'g',
   }
 }
 
@@ -54,6 +55,7 @@ export async function buscarProductosPorNombre(texto) {
     categoria: d.categoria,
     pesoUnidadG: d.peso_unidad_g === null ? null : Number(d.peso_unidad_g),
     unidadNombre: d.unidad_nombre,
+    unidadMedida: d.unidad_medida || 'g',
   }))
 }
 
@@ -76,6 +78,7 @@ export async function guardarProductoEnCatalogo(producto) {
         categoria: producto.categoria || null,
         peso_unidad_g: producto.pesoUnidadG ?? null,
         unidad_nombre: producto.unidadNombre || null,
+        unidad_medida: producto.unidadMedida === 'ml' ? 'ml' : 'g',
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'codigo_barras' }

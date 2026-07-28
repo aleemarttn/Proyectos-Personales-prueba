@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom'
 import { useDiario } from '../context/DiarioContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { horaCorta } from '../utils/formato.js'
+import { conUnidad } from '../utils/unidades.js'
 
 // Pantalla principal del diario: objetivo diario vs. consumido hoy, y las
 // comidas del día (editables en Perfil, máximo 7) con lo registrado en
@@ -242,7 +243,7 @@ function SeccionComida({ comida, registros, plegada, onAlternar, onAnadir, onEli
                 <div className="flex items-center gap-2 text-xs text-gray-400 font-semibold mt-0.5">
                   {r.cantidadG > 0 && (
                     <>
-                      <span>{Math.round(r.cantidadG)} g</span>
+                      <span>{conUnidad(r.cantidadG, r.unidadMedida)}</span>
                       <span>·</span>
                     </>
                   )}

@@ -5,6 +5,8 @@ import { useApp } from '../context/AppContext.jsx'
 import { CATEGORIAS } from '../data/categorias.js'
 import EscanerNutricional from '../components/EscanerNutricional.jsx'
 import SupermercadoSelector from '../components/SupermercadoSelector.jsx'
+import SelectorUnidad from '../components/SelectorUnidad.jsx'
+import { adivinarUnidad } from '../utils/unidades.js'
 
 // Formulario para añadir un alimento. Si venimos del escáner, llega
 // con datos ya rellenados (location.state.prefill).
@@ -28,6 +30,9 @@ export default function AnadirAlimento() {
     categoria: prefill.categoria || 'Otros',
     pesoUnidadG: prefill.pesoUnidadG ?? '',
     unidadNombre: prefill.unidadNombre || '',
+    // Sólido (g) o líquido (ml). Si viene del escáner se deduce del envase.
+    unidadMedida:
+      prefill.unidadMedida || adivinarUnidad(prefill.cantidad) || 'g',
   })
 
   const [guardando, setGuardando] = useState(false)
@@ -83,6 +88,7 @@ export default function AnadirAlimento() {
           categoria: form.categoria,
           pesoUnidadG: aNumero(form.pesoUnidadG),
           unidadNombre: form.unidadNombre.trim() || null,
+          unidadMedida: form.unidadMedida,
         },
         origen
       )
@@ -159,7 +165,7 @@ export default function AnadirAlimento() {
           </p>
           <div className="grid grid-cols-2 gap-3">
             <Campo
-              label="Peso por unidad (g)"
+              label={`Peso por unidad (${form.unidadMedida})`}
               tipo="number"
               valor={form.pesoUnidadG}
               onChange={(v) => set('pesoUnidadG', v)}
@@ -186,7 +192,9 @@ export default function AnadirAlimento() {
             <div className="flex items-center justify-between mb-1">
               <div>
                 <p className="font-bold text-gray-800">Información nutricional</p>
-                <p className="text-xs text-gray-400 font-semibold">Valores por 100 g / 100 ml</p>
+                <p className="text-xs text-gray-400 font-semibold">
+                  Valores por 100 {form.unidadMedida}
+                </p>
               </div>
               <button
                 type="button"
@@ -198,6 +206,19 @@ export default function AnadirAlimento() {
               >
                 <ScanLine size={16} /> Escanear etiqueta
               </button>
+            </div>
+
+            {/* Sólido o líquido: decide si todo se mide en gramos o en
+                mililitros (una bebida se registra en ml, no en g). */}
+            <div className="flex items-center justify-between gap-3 bg-gray-50 rounded-xl px-3 py-2 my-2">
+              <p className="text-xs text-gray-500 font-bold">
+                ¿Se mide en gramos o en mililitros?
+              </p>
+              <SelectorUnidad
+                valor={form.unidadMedida}
+                onChange={(u) => set('unidadMedida', u)}
+                size="compacto"
+              />
             </div>
 
             {avisoMacros && (

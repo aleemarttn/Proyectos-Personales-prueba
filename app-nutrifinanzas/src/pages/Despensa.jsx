@@ -5,6 +5,7 @@ import { useApp } from '../context/AppContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { colorCategoria } from '../data/categorias.js'
 import { euros } from '../utils/formato.js'
+import { unidadDe } from '../utils/unidades.js'
 import DetalleAlimento from '../components/DetalleAlimento.jsx'
 
 // Pantalla principal: la despensa con todos los alimentos.
@@ -125,7 +126,9 @@ export default function Despensa() {
                   {a.proteinas != null && <Macro label="P" valor={a.proteinas} color="#ef4444" />}
                   {a.hidratos != null && <Macro label="H" valor={a.hidratos} color="#f59e0b" />}
                   {a.grasas != null && <Macro label="G" valor={a.grasas} color="#eab308" />}
-                  <span className="text-[10px] text-gray-300 font-semibold">/100g</span>
+                  <span className="text-[10px] text-gray-300 font-semibold">
+                    /100 {unidadDe(a)}
+                  </span>
                 </div>
               )}
             </div>

@@ -12,9 +12,12 @@ import {
   Trash2,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
 import { useDiario } from '../context/DiarioContext.jsx'
 import { buscarProductosPorNombre } from '../lib/productos.js'
 import { comidaSugeridaPorHora } from '../lib/comidas.js'
+import SelectorUnidad from '../components/SelectorUnidad.jsx'
+import { unidadDe, conUnidad } from '../utils/unidades.js'
 
 const TABS = [
   { id: 'despensa', label: 'Despensa' },
@@ -42,7 +45,12 @@ export default function RegistrarComida() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const { alimentos } = useApp()
+  const { perfil } = useAuth()
   const { agregarRegistros, comidas } = useDiario()
+
+  // En modo sencillo el perfil no tiene objetivos de macros: solo importan
+  // las kcal, así que no se piden proteínas/hidratos/grasas.
+  const esControlTotal = perfil?.tipo === 'total'
 
   const [tab, setTab] = useState('despensa')
 
@@ -75,6 +83,7 @@ export default function RegistrarComida() {
   const [manual, setManual] = useState({
     nombre: '',
     cantidadG: '',
+    unidadMedida: 'g',
     kcal: '',
     proteinas: '',
     hidratos: '',
@@ -140,6 +149,8 @@ export default function RegistrarComida() {
       : null
 
   const comidaElegida = comidas.find((c) => c.id === comidaId) || null
+  // Unidad del alimento elegido: gramos o mililitros (bebidas).
+  const unidad = tab === 'manual' ? manual.unidadMedida : unidadDe(seleccionado)
 
   const validoOrigen = tab !== 'manual' && !!seleccionado && cantidadValida && !sinKcal
   const validoManual = tab === 'manual' && manual.nombre.trim() && manual.kcal !== ''
@@ -152,6 +163,7 @@ export default function RegistrarComida() {
         clave: `${Date.now()}-${Math.random()}`,
         nombre: manual.nombre.trim(),
         cantidadG: aNumero(manual.cantidadG) || 0,
+        unidadMedida: manual.unidadMedida,
         kcal: Number(manual.kcal) || 0,
         proteinas: aNumero(manual.proteinas),
         hidratos: aNumero(manual.hidratos),
@@ -163,6 +175,7 @@ export default function RegistrarComida() {
       clave: `${Date.now()}-${Math.random()}`,
       nombre: seleccionado.nombre,
       cantidadG: cantidadNum,
+      unidadMedida: unidadDe(seleccionado),
       kcal: preview.kcal,
       proteinas: preview.proteinas,
       hidratos: preview.hidratos,
@@ -175,7 +188,15 @@ export default function RegistrarComida() {
 
   function vaciarFormulario() {
     elegir(null)
-    setManual({ nombre: '', cantidadG: '', kcal: '', proteinas: '', hidratos: '', grasas: '' })
+    setManual({
+      nombre: '',
+      cantidadG: '',
+      unidadMedida: 'g',
+      kcal: '',
+      proteinas: '',
+      hidratos: '',
+      grasas: '',
+    })
     setError('')
   }
 
@@ -353,7 +374,7 @@ export default function RegistrarComida() {
                     </div>
                     {modoCantidad === 'unidades' ? (
                       <Campo
-                        label={`Cuántas unidades de "${seleccionado.unidadNombre || 'ud'}" (${seleccionado.pesoUnidadG} g cada una)`}
+                        label={`Cuántas unidades de "${seleccionado.unidadNombre || 'ud'}" (${seleccionado.pesoUnidadG} ${unidad} cada una)`}
                         tipo="number"
                         valor={unidades}
                         onChange={setUnidades}
@@ -361,30 +382,30 @@ export default function RegistrarComida() {
                       />
                     ) : (
                       <Campo
-                        label="Cantidad consumida (g)"
+                        label={`Cantidad consumida (${unidad})`}
                         tipo="number"
                         valor={cantidadG}
                         onChange={setCantidadG}
-                        placeholder="Ej. 150"
+                        placeholder={unidad === 'ml' ? 'Ej. 330' : 'Ej. 150'}
                       />
                     )}
                   </>
                 ) : (
                   <Campo
-                    label="Cantidad consumida (g)"
+                    label={`Cantidad consumida (${unidad})`}
                     tipo="number"
                     valor={cantidadG}
                     onChange={setCantidadG}
-                    placeholder="Ej. 150"
+                    placeholder={unidad === 'ml' ? 'Ej. 330' : 'Ej. 150'}
                   />
                 )}
                 {preview && (
                   <div className="flex items-center gap-2 bg-brand-50 text-brand-700 font-bold rounded-xl px-4 py-2.5 text-sm">
                     <Flame size={16} /> {Math.round(preview.kcal)} kcal
-                    {preview.proteinas != null && ` · P ${Math.round(preview.proteinas)}g`}
-                    {preview.hidratos != null && ` · H ${Math.round(preview.hidratos)}g`}
-                    {preview.grasas != null && ` · G ${Math.round(preview.grasas)}g`}
-                    {modoCantidad === 'unidades' && ` · ${Math.round(cantidadNum)} g en total`}
+                    {esControlTotal && preview.proteinas != null && ` · P ${Math.round(preview.proteinas)}g`}
+                    {esControlTotal && preview.hidratos != null && ` · H ${Math.round(preview.hidratos)}g`}
+                    {esControlTotal && preview.grasas != null && ` · G ${Math.round(preview.grasas)}g`}
+                    {modoCantidad === 'unidades' && ` · ${conUnidad(cantidadNum, unidad)} en total`}
                   </div>
                 )}
               </>
@@ -400,14 +421,27 @@ export default function RegistrarComida() {
               onChange={(v) => setManual((m) => ({ ...m, nombre: v }))}
               placeholder="Ej. Bocadillo de tortilla"
             />
-            <Campo
-              label="Cantidad aproximada (g, opcional)"
-              tipo="number"
-              valor={manual.cantidadG}
-              onChange={(v) => setManual((m) => ({ ...m, cantidadG: v }))}
-              placeholder="Ej. 200"
-            />
-            <div className="grid grid-cols-2 gap-3 mt-1">
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <Campo
+                  label={`Cantidad aproximada (${manual.unidadMedida}, opcional)`}
+                  tipo="number"
+                  valor={manual.cantidadG}
+                  onChange={(v) => setManual((m) => ({ ...m, cantidadG: v }))}
+                  placeholder={manual.unidadMedida === 'ml' ? 'Ej. 330' : 'Ej. 200'}
+                />
+              </div>
+              <div className="mb-4">
+                <SelectorUnidad
+                  valor={manual.unidadMedida}
+                  onChange={(u) => setManual((m) => ({ ...m, unidadMedida: u }))}
+                />
+              </div>
+            </div>
+
+            {/* En modo sencillo solo se piden kcal: no hay objetivos de
+                macros con los que comparar. */}
+            <div className={esControlTotal ? 'grid grid-cols-2 gap-3 mt-1' : 'mt-1'}>
               <Campo
                 label="kcal"
                 tipo="number"
@@ -415,27 +449,31 @@ export default function RegistrarComida() {
                 onChange={(v) => setManual((m) => ({ ...m, kcal: v }))}
                 placeholder="450"
               />
-              <Campo
-                label="Proteínas (g)"
-                tipo="number"
-                valor={manual.proteinas}
-                onChange={(v) => setManual((m) => ({ ...m, proteinas: v }))}
-                placeholder="20"
-              />
-              <Campo
-                label="Hidratos (g)"
-                tipo="number"
-                valor={manual.hidratos}
-                onChange={(v) => setManual((m) => ({ ...m, hidratos: v }))}
-                placeholder="45"
-              />
-              <Campo
-                label="Grasas (g)"
-                tipo="number"
-                valor={manual.grasas}
-                onChange={(v) => setManual((m) => ({ ...m, grasas: v }))}
-                placeholder="15"
-              />
+              {esControlTotal && (
+                <>
+                  <Campo
+                    label="Proteínas (g)"
+                    tipo="number"
+                    valor={manual.proteinas}
+                    onChange={(v) => setManual((m) => ({ ...m, proteinas: v }))}
+                    placeholder="20"
+                  />
+                  <Campo
+                    label="Hidratos (g)"
+                    tipo="number"
+                    valor={manual.hidratos}
+                    onChange={(v) => setManual((m) => ({ ...m, hidratos: v }))}
+                    placeholder="45"
+                  />
+                  <Campo
+                    label="Grasas (g)"
+                    tipo="number"
+                    valor={manual.grasas}
+                    onChange={(v) => setManual((m) => ({ ...m, grasas: v }))}
+                    placeholder="15"
+                  />
+                </>
+              )}
             </div>
           </div>
         )}
@@ -457,7 +495,7 @@ export default function RegistrarComida() {
                   <div className="min-w-0 flex-1">
                     <p className="font-bold text-gray-800 text-sm truncate">{p.nombre}</p>
                     <p className="text-xs text-gray-400 font-semibold">
-                      {p.cantidadG ? `${Math.round(p.cantidadG)} g · ` : ''}
+                      {p.cantidadG ? `${conUnidad(p.cantidadG, p.unidadMedida)} · ` : ''}
                       {Math.round(p.kcal)} kcal
                     </p>
                   </div>
@@ -478,18 +516,32 @@ export default function RegistrarComida() {
           <p className="bg-red-50 text-red-600 text-sm font-semibold rounded-xl px-4 py-3">{error}</p>
         )}
 
+        {/* Acción principal: una comida se construye alimento a alimento. */}
         <button
           onClick={anadirOtro}
           disabled={!valido || guardando}
-          className="w-full bg-white text-brand-700 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-card active:scale-[0.98] transition mt-4 disabled:opacity-40"
+          className="w-full bg-brand-500 text-white font-extrabold text-lg py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-soft mt-4 disabled:opacity-40"
         >
-          <Plus size={18} /> Añadir otro alimento
+          <Plus size={20} /> Añadir alimento
         </button>
+
+        {/* Por qué está apagado el botón de arriba: sin esto parece roto. */}
+        {!valido && (
+          <p className="text-center text-xs text-gray-400 font-semibold">
+            {tab === 'manual'
+              ? 'Escribe el nombre y las kcal para poder añadirlo.'
+              : !seleccionado
+                ? 'Elige un alimento de la lista para añadirlo.'
+                : sinKcal
+                  ? 'Este alimento no tiene kcal registradas.'
+                  : `Indica cuánto has tomado (en ${unidad}).`}
+          </p>
+        )}
 
         <button
           onClick={guardar}
           disabled={totalAGuardar === 0 || guardando}
-          className="w-full bg-brand-500 text-white font-extrabold text-lg py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-soft disabled:opacity-40"
+          className="w-full bg-white text-brand-700 font-extrabold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-card active:scale-[0.98] transition disabled:opacity-40"
         >
           {guardando ? (
             <>
@@ -499,7 +551,7 @@ export default function RegistrarComida() {
             <>
               <Check size={20} />
               {totalAGuardar > 1
-                ? `Registrar ${totalAGuardar} alimentos`
+                ? `Registrar ${totalAGuardar} alimentos en el diario`
                 : 'Registrar en el diario'}
             </>
           )}
@@ -520,7 +572,9 @@ function OpcionAlimento({ item, seleccionado, onClick }) {
       <div className="min-w-0">
         <p className="font-bold text-gray-800 truncate">{item.nombre}</p>
         <p className="text-xs text-gray-400 font-semibold">
-          {item.kcal != null ? `${item.kcal} kcal /100g` : 'Sin kcal registradas'}
+          {item.kcal != null
+            ? `${item.kcal} kcal /100 ${unidadDe(item)}`
+            : 'Sin kcal registradas'}
         </p>
       </div>
       {seleccionado && <Check size={18} className="text-brand-500 shrink-0" />}

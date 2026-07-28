@@ -3,7 +3,9 @@ import { X, ScanLine, Check, Loader2, Pencil } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { colorCategoria } from '../data/categorias.js'
 import { euros } from '../utils/formato.js'
+import { unidadDe } from '../utils/unidades.js'
 import EscanerNutricional from './EscanerNutricional.jsx'
+import SelectorUnidad from './SelectorUnidad.jsx'
 import { guardarProductoEnCatalogo } from '../lib/productos.js'
 
 // Ficha de un alimento (bottom sheet). Muestra sus datos y la información
@@ -26,6 +28,7 @@ export default function DetalleAlimento({ alimento, onCerrar }) {
     precio: alimento.precio ?? '',
     pesoUnidadG: alimento.pesoUnidadG ?? '',
     unidadNombre: alimento.unidadNombre || '',
+    unidadMedida: unidadDe(alimento),
   })
 
   const [form, setForm] = useState({
@@ -74,6 +77,7 @@ export default function DetalleAlimento({ alimento, onCerrar }) {
         precio: aNumero(formDatos.precio) ?? 0,
         peso_unidad_g: pesoUnidadG,
         unidad_nombre: unidadNombre,
+        unidad_medida: formDatos.unidadMedida,
       })
 
       // Si este alimento viene de un código de barras, completamos también
@@ -90,6 +94,7 @@ export default function DetalleAlimento({ alimento, onCerrar }) {
           categoria: alimento.categoria,
           pesoUnidadG,
           unidadNombre,
+          unidadMedida: formDatos.unidadMedida,
         })
       }
 
@@ -217,7 +222,7 @@ export default function DetalleAlimento({ alimento, onCerrar }) {
                     placeholder="5,80"
                   />
                   <CampoMacro
-                    label="Peso/unidad (g)"
+                    label={`Peso/unidad (${formDatos.unidadMedida})`}
                     valor={formDatos.pesoUnidadG}
                     onChange={(v) => setFormDatos((f) => ({ ...f, pesoUnidadG: v }))}
                     placeholder="Ej. 16"
@@ -228,6 +233,15 @@ export default function DetalleAlimento({ alimento, onCerrar }) {
                     onChange={(v) => setFormDatos((f) => ({ ...f, unidadNombre: v }))}
                     placeholder="Ej. rebanada"
                     tipo="text"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-3 bg-gray-50 rounded-xl px-3 py-2 mt-2">
+                  <span className="text-xs text-gray-500 font-bold">Se mide en</span>
+                  <SelectorUnidad
+                    valor={formDatos.unidadMedida}
+                    onChange={(u) => setFormDatos((f) => ({ ...f, unidadMedida: u }))}
+                    size="compacto"
                   />
                 </div>
 
@@ -263,7 +277,7 @@ export default function DetalleAlimento({ alimento, onCerrar }) {
                 {alimento.pesoUnidadG != null && (
                   <Dato
                     etiqueta="Peso por unidad"
-                    valor={`${alimento.pesoUnidadG} g${alimento.unidadNombre ? ` / ${alimento.unidadNombre}` : ''}`}
+                    valor={`${alimento.pesoUnidadG} ${unidadDe(alimento)}${alimento.unidadNombre ? ` / ${alimento.unidadNombre}` : ''}`}
                   />
                 )}
               </div>
@@ -275,7 +289,9 @@ export default function DetalleAlimento({ alimento, onCerrar }) {
             <div className="flex items-center justify-between mb-3">
               <div>
                 <p className="font-bold text-gray-800">Información nutricional</p>
-                <p className="text-xs text-gray-400 font-semibold">Por 100 g / 100 ml</p>
+                <p className="text-xs text-gray-400 font-semibold">
+                  Por 100 {unidadDe(alimento)}
+                </p>
               </div>
               {!editando && (
                 <button
