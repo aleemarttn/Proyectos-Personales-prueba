@@ -8,6 +8,8 @@ import {
   Search,
   Flame,
   AlertTriangle,
+  Plus,
+  Trash2,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { useDiario } from '../context/DiarioContext.jsx'
@@ -30,11 +32,17 @@ function aNumero(v) {
 // Formulario para registrar una comida consumida, desde tres orígenes
 // posibles: un alimento de la despensa, un producto del catálogo
 // compartido (por nombre), o macros escritos a mano.
+//
+// Una comida real casi nunca es un solo alimento ("arroz con pechuga y
+// huevo" son tres), y cada uno tiene sus propias kcal. Por eso se pueden ir
+// acumulando alimentos en una lista con "Añadir otro" y guardarlos todos
+// juntos en la misma comida del día. Con uno solo el flujo no cambia: se
+// rellena y se pulsa "Registrar".
 export default function RegistrarComida() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const { alimentos } = useApp()
-  const { agregarRegistro, comidas } = useDiario()
+  const { agregarRegistros, comidas } = useDiario()
 
   const [tab, setTab] = useState('despensa')
 
@@ -73,8 +81,12 @@ export default function RegistrarComida() {
     grasas: '',
   })
 
+  // Alimentos ya añadidos a esta comida, todavía sin guardar.
+  const [pendientes, setPendientes] = useState([])
+
   const [guardando, setGuardando] = useState(false)
   const [hecho, setHecho] = useState(false)
+  const [guardados, setGuardados] = useState(0)
   const [error, setError] = useState('')
 
   function cambiarTab(nuevo) {
@@ -133,40 +145,63 @@ export default function RegistrarComida() {
   const validoManual = tab === 'manual' && manual.nombre.trim() && manual.kcal !== ''
   const valido = validoOrigen || validoManual
 
+  // Lo que hay ahora mismo en el formulario, como registro listo para guardar.
+  function registroDelFormulario() {
+    if (tab === 'manual') {
+      return {
+        clave: `${Date.now()}-${Math.random()}`,
+        nombre: manual.nombre.trim(),
+        cantidadG: aNumero(manual.cantidadG) || 0,
+        kcal: Number(manual.kcal) || 0,
+        proteinas: aNumero(manual.proteinas),
+        hidratos: aNumero(manual.hidratos),
+        grasas: aNumero(manual.grasas),
+        origen: 'manual',
+      }
+    }
+    return {
+      clave: `${Date.now()}-${Math.random()}`,
+      nombre: seleccionado.nombre,
+      cantidadG: cantidadNum,
+      kcal: preview.kcal,
+      proteinas: preview.proteinas,
+      hidratos: preview.hidratos,
+      grasas: preview.grasas,
+      alimentoId: tab === 'despensa' ? seleccionado.id : null,
+      codigoBarras: tab === 'catalogo' ? seleccionado.codigoBarras : null,
+      origen: tab,
+    }
+  }
+
+  function vaciarFormulario() {
+    elegir(null)
+    setManual({ nombre: '', cantidadG: '', kcal: '', proteinas: '', hidratos: '', grasas: '' })
+    setError('')
+  }
+
+  // Guarda el alimento actual en la lista y deja el formulario listo para
+  // el siguiente, sin tocar la base de datos todavía.
+  function anadirOtro() {
+    if (!valido) return
+    setPendientes((prev) => [...prev, registroDelFormulario()])
+    vaciarFormulario()
+  }
+
+  function quitarPendiente(clave) {
+    setPendientes((prev) => prev.filter((p) => p.clave !== clave))
+  }
+
   async function guardar() {
-    if (!valido || guardando) return
+    // Lo que esté a medias en el formulario cuenta como uno más: así, con un
+    // solo alimento, no hace falta pasar por "Añadir otro".
+    const aGuardar = valido ? [...pendientes, registroDelFormulario()] : pendientes
+    if (aGuardar.length === 0 || guardando) return
+
     setGuardando(true)
     setError('')
     try {
-      if (tab === 'manual') {
-        await agregarRegistro(
-          {
-            nombre: manual.nombre.trim(),
-            cantidadG: aNumero(manual.cantidadG) || 0,
-            kcal: Number(manual.kcal) || 0,
-            proteinas: aNumero(manual.proteinas),
-            hidratos: aNumero(manual.hidratos),
-            grasas: aNumero(manual.grasas),
-            comidaId,
-          },
-          'manual'
-        )
-      } else {
-        await agregarRegistro(
-          {
-            nombre: seleccionado.nombre,
-            cantidadG: cantidadNum,
-            kcal: preview.kcal,
-            proteinas: preview.proteinas,
-            hidratos: preview.hidratos,
-            grasas: preview.grasas,
-            alimentoId: tab === 'despensa' ? seleccionado.id : null,
-            codigoBarras: tab === 'catalogo' ? seleccionado.codigoBarras : null,
-            comidaId,
-          },
-          tab
-        )
-      }
+      await agregarRegistros(aGuardar.map((r) => ({ ...r, comidaId })))
+      setGuardados(aGuardar.length)
       setHecho(true)
       setTimeout(() => navigate('/diario'), 1000)
     } catch (e) {
@@ -176,6 +211,11 @@ export default function RegistrarComida() {
     }
   }
 
+  const totalPendientes = pendientes.reduce((s, p) => s + (p.kcal || 0), 0)
+  // Cuántos alimentos se guardarían al pulsar "Registrar": los de la lista
+  // más el que esté completo en el formulario.
+  const totalAGuardar = pendientes.length + (valido ? 1 : 0)
+
   if (hecho) {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-cream animate-fade-in px-8 text-center">
@@ -184,9 +224,8 @@ export default function RegistrarComida() {
         </div>
         <h2 className="text-2xl font-black text-gray-800">¡Registrado!</h2>
         <p className="text-gray-500 mt-1">
-          {comidaElegida
-            ? `Añadido a "${comidaElegida.nombre}".`
-            : 'Ya está en tu diario de hoy.'}
+          {guardados > 1 ? `${guardados} alimentos añadidos` : 'Añadido'}
+          {comidaElegida ? ` a "${comidaElegida.nombre}".` : ' a tu diario de hoy.'}
         </p>
       </div>
     )
@@ -401,14 +440,56 @@ export default function RegistrarComida() {
           </div>
         )}
 
+        {/* Alimentos ya añadidos a esta comida (aún sin guardar) */}
+        {pendientes.length > 0 && (
+          <div className="bg-white rounded-2xl p-4 shadow-card">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-bold text-gray-600">
+                En esta comida ({pendientes.length})
+              </p>
+              <span className="text-sm font-extrabold text-brand-600 flex items-center gap-1">
+                <Flame size={14} /> {Math.round(totalPendientes)} kcal
+              </span>
+            </div>
+            <div className="space-y-2">
+              {pendientes.map((p) => (
+                <div key={p.clave} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-gray-800 text-sm truncate">{p.nombre}</p>
+                    <p className="text-xs text-gray-400 font-semibold">
+                      {p.cantidadG ? `${Math.round(p.cantidadG)} g · ` : ''}
+                      {Math.round(p.kcal)} kcal
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => quitarPendiente(p.clave)}
+                    className="text-gray-300 hover:text-red-500 active:scale-90 transition shrink-0"
+                    aria-label={`Quitar ${p.nombre}`}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {error && (
           <p className="bg-red-50 text-red-600 text-sm font-semibold rounded-xl px-4 py-3">{error}</p>
         )}
 
         <button
-          onClick={guardar}
+          onClick={anadirOtro}
           disabled={!valido || guardando}
-          className="w-full bg-brand-500 text-white font-extrabold text-lg py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-soft mt-5 disabled:opacity-40"
+          className="w-full bg-white text-brand-700 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-card active:scale-[0.98] transition mt-4 disabled:opacity-40"
+        >
+          <Plus size={18} /> Añadir otro alimento
+        </button>
+
+        <button
+          onClick={guardar}
+          disabled={totalAGuardar === 0 || guardando}
+          className="w-full bg-brand-500 text-white font-extrabold text-lg py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-soft disabled:opacity-40"
         >
           {guardando ? (
             <>
@@ -416,7 +497,10 @@ export default function RegistrarComida() {
             </>
           ) : (
             <>
-              <Check size={20} /> Registrar en el diario
+              <Check size={20} />
+              {totalAGuardar > 1
+                ? `Registrar ${totalAGuardar} alimentos`
+                : 'Registrar en el diario'}
             </>
           )}
         </button>

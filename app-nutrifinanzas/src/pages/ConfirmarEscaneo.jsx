@@ -26,9 +26,10 @@ export default function ConfirmarEscaneo() {
   const detectados = location.state?.items || []
   const supermercadoInicial = location.state?.supermercado || 'Mercadona'
 
-  const [supermercado, setSupermercado] = useState(
-    SUPERMERCADOS.includes(supermercadoInicial) ? supermercadoInicial : 'Mercadona'
-  )
+  // No se valida contra una lista fija: la de supermercados es comunitaria y
+  // vive en la base de datos. Si el detectado no está, SupermercadoSelector
+  // lo muestra igualmente como opción.
+  const [supermercado, setSupermercado] = useState(supermercadoInicial)
   const [items, setItems] = useState(
     detectados.map((it, i) => ({
       idTmp: i,

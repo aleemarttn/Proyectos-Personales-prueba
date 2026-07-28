@@ -126,8 +126,8 @@ export function DiarioProvider({ children }) {
   // --- Acciones sobre el diario ---
 
   // origen: 'despensa' | 'catalogo' | 'manual'
-  async function agregarRegistro(registro, origen = 'manual') {
-    const fila = {
+  function registroAFila(registro, origen) {
+    return {
       usuario_id: sesion.user.id,
       alimento_id: registro.alimentoId || null,
       codigo_barras: registro.codigoBarras || null,
@@ -140,19 +140,26 @@ export function DiarioProvider({ children }) {
       grasas: registro.grasas ?? null,
       origen,
     }
+  }
 
+  // Uno o varios alimentos de una sentada (una comida como "arroz con pechuga y
+  // huevo" son tres registros). Un solo INSERT y un solo recálculo del
+  // resumen, en vez de uno por alimento. Cada registro trae su `origen`.
+  async function agregarRegistros(registros) {
+    if (registros.length === 0) return []
+
+    const filas = registros.map((r) => registroAFila(r, r.origen || 'manual'))
     const { data, error: err } = await supabase
       .from('registros_diarios')
-      .insert(fila)
+      .insert(filas)
       .select()
-      .single()
 
     if (err) throw err
 
-    const nuevo = filaARegistro(data)
-    setRegistrosHoy((prev) => [...prev, nuevo])
+    const nuevos = data.map(filaARegistro)
+    setRegistrosHoy((prev) => [...prev, ...nuevos])
     await cargarResumen()
-    return nuevo
+    return nuevos
   }
 
   async function eliminarRegistro(id) {
@@ -257,7 +264,7 @@ export function DiarioProvider({ children }) {
     resumen,
     cargando,
     error,
-    agregarRegistro,
+    agregarRegistros,
     eliminarRegistro,
     moverRegistro,
     anadirComida,

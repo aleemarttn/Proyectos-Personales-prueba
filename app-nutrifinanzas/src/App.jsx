@@ -5,6 +5,7 @@ import { useAuth } from './context/AuthContext.jsx'
 import PhoneFrame from './components/PhoneFrame.jsx'
 import BottomNav from './components/BottomNav.jsx'
 import InstalarApp from './components/InstalarApp.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 
 // Pantallas de entrada: van en el paquete inicial porque son lo primero que se ve
 import Bienvenida from './pages/Bienvenida.jsx'
@@ -48,6 +49,7 @@ export default function App() {
   return (
     <PhoneFrame>
       <div className="flex-1 overflow-y-auto no-scrollbar">
+        <ErrorBoundary key={location.pathname}>
         <Suspense fallback={<Cargando />}>
         <Routes>
           {/* Públicas */}
@@ -86,6 +88,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </Suspense>
+        </ErrorBoundary>
       </div>
 
       <InstalarApp conBarra={mostrarBarra} />
