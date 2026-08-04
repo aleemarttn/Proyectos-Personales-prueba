@@ -64,7 +64,7 @@ export default function Despensa() {
       </div>
 
       {/* Resumen rápido */}
-      <div className="px-5 mb-3 flex items-center justify-between">
+      <div data-tour="despensa-lista" className="px-5 mb-3 flex items-center justify-between">
         <span className="font-bold text-gray-700">
           {alimentos.length} {alimentos.length === 1 ? 'producto' : 'productos'}
         </span>
@@ -82,7 +82,7 @@ export default function Despensa() {
       )}
 
       {/* Lista de alimentos */}
-      <div data-tour="despensa-lista" className="px-5 pb-6 space-y-3">
+      <div className="px-5 pb-6 space-y-3">
         {cargando && (
           <div className="flex justify-center py-16">
             <Loader2 className="animate-spin text-brand-400" size={28} />
