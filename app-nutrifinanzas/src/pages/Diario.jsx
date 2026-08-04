@@ -10,7 +10,6 @@ import {
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useDiario } from '../context/DiarioContext.jsx'
-import { useAuth } from '../context/AuthContext.jsx'
 import { horaCorta } from '../utils/formato.js'
 import { conUnidad } from '../utils/unidades.js'
 
@@ -18,15 +17,15 @@ import { conUnidad } from '../utils/unidades.js'
 // comidas del día (editables en Perfil, máximo 7) con lo registrado en
 // cada una. El objetivo es GLOBAL del día, no por comida: cada sección
 // solo suma lo suyo.
+//
+// Solo existe en modo completo; la ruta ya lo garantiza (ver App.jsx).
 export default function Diario() {
   const navigate = useNavigate()
   const { registrosHoy, comidas, resumen, cargando, error, eliminarRegistro } = useDiario()
-  const { perfil } = useAuth()
 
   // Comidas plegadas (por id). Por defecto todas abiertas.
   const [plegadas, setPlegadas] = useState({})
 
-  const esControlTotal = perfil?.tipo === 'total'
   const kcalHoy = registrosHoy.reduce((s, r) => s + r.kcal, 0)
 
   function alternar(id) {
@@ -57,18 +56,14 @@ export default function Diario() {
 
       {/* Objetivo del día */}
       <div className="px-5 mb-5">
-        {esControlTotal && resumen ? (
+        {/* Si el resumen aún no ha llegado, al menos enseñamos lo acumulado */}
+        {resumen ? (
           <ResumenDia resumen={resumen} />
         ) : (
           <div className="bg-white rounded-3xl p-4 shadow-card">
             <div className="flex items-center justify-center gap-2 bg-brand-50 text-brand-700 font-extrabold rounded-2xl py-3">
               <Flame size={20} /> {Math.round(kcalHoy)} kcal registradas hoy
             </div>
-            {!esControlTotal && (
-              <p className="text-center text-xs text-amber-600 font-semibold mt-3">
-                Estás en modo sencillo, sin objetivos de macros que comparar.
-              </p>
-            )}
           </div>
         )}
       </div>
@@ -252,7 +247,13 @@ function SeccionComida({ comida, registros, plegada, onAlternar, onAnadir, onEli
               </div>
 
               <span className="font-bold text-gray-600 text-sm shrink-0">
+                {r.origen === 'restaurante' ? '~' : ''}
                 {Math.round(r.kcal)} kcal
+                {r.origen === 'restaurante' && (
+                  <span className="block text-[10px] font-semibold text-gray-300 text-right">
+                    estimado
+                  </span>
+                )}
               </span>
 
               <button

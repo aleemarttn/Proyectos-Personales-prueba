@@ -38,8 +38,8 @@ function filaAComida(fila) {
   return { id: fila.id, nombre: fila.nombre, orden: fila.orden }
 }
 
-// Convierte la fila de la vista `resumen_diario` (puede no existir si el
-// perfil es "modo sencillo", sin objetivos de macros).
+// Convierte la fila de la vista `resumen_diario` (no existe en modo simple:
+// la vista filtra por tipo_perfil = 'total', ver migración 005).
 function filaAResumen(fila) {
   if (!fila) return null
   return {

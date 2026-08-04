@@ -12,7 +12,6 @@ import {
   Trash2,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { useAuth } from '../context/AuthContext.jsx'
 import { useDiario } from '../context/DiarioContext.jsx'
 import { buscarProductosPorNombre } from '../lib/productos.js'
 import { comidaSugeridaPorHora } from '../lib/comidas.js'
@@ -45,12 +44,7 @@ export default function RegistrarComida() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const { alimentos } = useApp()
-  const { perfil } = useAuth()
   const { agregarRegistros, comidas } = useDiario()
-
-  // En modo sencillo el perfil no tiene objetivos de macros: solo importan
-  // las kcal, así que no se piden proteínas/hidratos/grasas.
-  const esControlTotal = perfil?.tipo === 'total'
 
   const [tab, setTab] = useState('despensa')
 
@@ -402,9 +396,9 @@ export default function RegistrarComida() {
                 {preview && (
                   <div className="flex items-center gap-2 bg-brand-50 text-brand-700 font-bold rounded-xl px-4 py-2.5 text-sm">
                     <Flame size={16} /> {Math.round(preview.kcal)} kcal
-                    {esControlTotal && preview.proteinas != null && ` · P ${Math.round(preview.proteinas)}g`}
-                    {esControlTotal && preview.hidratos != null && ` · H ${Math.round(preview.hidratos)}g`}
-                    {esControlTotal && preview.grasas != null && ` · G ${Math.round(preview.grasas)}g`}
+                    {preview.proteinas != null && ` · P ${Math.round(preview.proteinas)}g`}
+                    {preview.hidratos != null && ` · H ${Math.round(preview.hidratos)}g`}
+                    {preview.grasas != null && ` · G ${Math.round(preview.grasas)}g`}
                     {modoCantidad === 'unidades' && ` · ${conUnidad(cantidadNum, unidad)} en total`}
                   </div>
                 )}
@@ -439,9 +433,7 @@ export default function RegistrarComida() {
               </div>
             </div>
 
-            {/* En modo sencillo solo se piden kcal: no hay objetivos de
-                macros con los que comparar. */}
-            <div className={esControlTotal ? 'grid grid-cols-2 gap-3 mt-1' : 'mt-1'}>
+            <div className="grid grid-cols-2 gap-3 mt-1">
               <Campo
                 label="kcal"
                 tipo="number"
@@ -449,31 +441,27 @@ export default function RegistrarComida() {
                 onChange={(v) => setManual((m) => ({ ...m, kcal: v }))}
                 placeholder="450"
               />
-              {esControlTotal && (
-                <>
-                  <Campo
-                    label="Proteínas (g)"
-                    tipo="number"
-                    valor={manual.proteinas}
-                    onChange={(v) => setManual((m) => ({ ...m, proteinas: v }))}
-                    placeholder="20"
-                  />
-                  <Campo
-                    label="Hidratos (g)"
-                    tipo="number"
-                    valor={manual.hidratos}
-                    onChange={(v) => setManual((m) => ({ ...m, hidratos: v }))}
-                    placeholder="45"
-                  />
-                  <Campo
-                    label="Grasas (g)"
-                    tipo="number"
-                    valor={manual.grasas}
-                    onChange={(v) => setManual((m) => ({ ...m, grasas: v }))}
-                    placeholder="15"
-                  />
-                </>
-              )}
+              <Campo
+                label="Proteínas (g)"
+                tipo="number"
+                valor={manual.proteinas}
+                onChange={(v) => setManual((m) => ({ ...m, proteinas: v }))}
+                placeholder="20"
+              />
+              <Campo
+                label="Hidratos (g)"
+                tipo="number"
+                valor={manual.hidratos}
+                onChange={(v) => setManual((m) => ({ ...m, hidratos: v }))}
+                placeholder="45"
+              />
+              <Campo
+                label="Grasas (g)"
+                tipo="number"
+                valor={manual.grasas}
+                onChange={(v) => setManual((m) => ({ ...m, grasas: v }))}
+                placeholder="15"
+              />
             </div>
           </div>
         )}

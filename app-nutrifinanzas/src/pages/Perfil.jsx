@@ -15,16 +15,19 @@ import {
   LogOut,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
+import { funcionesDe, nombreModo, esCompleto } from '../lib/modos.js'
 import EditorComidas from '../components/EditorComidas.jsx'
+import CambiarModo from '../components/CambiarModo.jsx'
 
-// Pantalla de Perfil: muestra los datos del onboarding y, si el perfil es
-// "Control total", también los objetivos de macros.
+// Pantalla de Perfil: los datos del onboarding, el modo activo (con la puerta
+// para cambiarlo) y, solo en modo completo, las comidas del día y los macros.
 export default function Perfil() {
   const navigate = useNavigate()
   const { perfil, cerrarSesion } = useAuth()
 
   if (!perfil) return null
-  const esControlTotal = perfil.tipo === 'total'
+  const funciones = funcionesDe(perfil.tipo)
+  const completo = esCompleto(perfil.tipo)
 
   async function salir() {
     const ok = window.confirm('¿Seguro que quieres cerrar sesión?')
@@ -35,7 +38,7 @@ export default function Perfil() {
   }
 
   // Datos para el donut de macros
-  const datosMacros = esControlTotal
+  const datosMacros = funciones.macros
     ? [
         { nombre: 'Hidratos', valor: perfil.macros.hidratos, color: '#f59e0b' },
         { nombre: 'Proteínas', valor: perfil.macros.proteinas, color: '#ef4444' },
@@ -53,21 +56,30 @@ export default function Perfil() {
         <h1 className="text-2xl font-black text-gray-800">{perfil.nombre}</h1>
         <div
           className={`inline-flex items-center gap-1.5 text-sm font-bold px-3 py-1 rounded-full mt-2 ${
-            esControlTotal
+            completo
               ? 'bg-brand-100 text-brand-700'
               : 'bg-amber-100 text-amber-700'
           }`}
         >
-          {esControlTotal ? <Target size={14} /> : <Sparkles size={14} />}
-          {esControlTotal ? 'Control total' : 'Modo sencillo'}
+          {completo ? <Target size={14} /> : <Sparkles size={14} />}
+          {nombreModo(perfil.tipo)}
         </div>
       </div>
 
-      {/* Datos básicos */}
+      {/* Datos básicos. En modo simple la edad y el género ni se piden ni se
+          guardan, así que tampoco se enseñan como huecos vacíos. */}
       <div className="px-5 mb-4">
         <div className="bg-white rounded-3xl p-4 shadow-card space-y-1">
-          <Dato icon={Cake} label="Edad" valor={perfil.edad ? `${perfil.edad} años` : '—'} />
-          <Dato icon={User} label="Género" valor={perfil.genero} />
+          {funciones.datosPersonales && (
+            <>
+              <Dato
+                icon={Cake}
+                label="Edad"
+                valor={perfil.edad ? `${perfil.edad} años` : '—'}
+              />
+              <Dato icon={User} label="Género" valor={perfil.genero || '—'} />
+            </>
+          )}
           <Dato
             icon={MapPin}
             label="Código postal"
@@ -76,11 +88,11 @@ export default function Perfil() {
         </div>
       </div>
 
-      {/* Comidas del día (editables, máximo 7) */}
-      <EditorComidas />
+      {/* Comidas del día (editables, máximo 7). Solo tienen sentido con diario. */}
+      {funciones.diario && <EditorComidas />}
 
-      {/* Macros (solo control total) */}
-      {esControlTotal && (
+      {/* Macros (solo modo completo) */}
+      {funciones.macros && (
         <div className="px-5 mb-4">
           <h2 className="font-extrabold text-gray-700 mb-3">
             Tus objetivos diarios
@@ -134,14 +146,8 @@ export default function Perfil() {
         </div>
       )}
 
-      {!esControlTotal && (
-        <div className="px-5 mb-4">
-          <div className="bg-amber-50 text-amber-700 rounded-3xl p-4 text-sm font-semibold text-center">
-            Estás en modo sencillo, sin objetivos de macros. Puedes reiniciar la
-            demo y elegir “Control total” para activarlos.
-          </div>
-        </div>
-      )}
+      {/* Saltar de un modo a otro (en los dos sentidos, sin perder datos) */}
+      <CambiarModo />
 
       {/* Cerrar sesión */}
       <div className="px-5">

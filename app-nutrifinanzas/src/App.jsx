@@ -2,10 +2,12 @@ import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from './context/AuthContext.jsx'
+import { funcionesDe } from './lib/modos.js'
 import PhoneFrame from './components/PhoneFrame.jsx'
 import BottomNav from './components/BottomNav.jsx'
 import InstalarApp from './components/InstalarApp.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
+import TourGuiado from './components/TourGuiado.jsx'
 
 // Pantallas de entrada: van en el paquete inicial porque son lo primero que se ve
 import Bienvenida from './pages/Bienvenida.jsx'
@@ -21,6 +23,8 @@ const RegistrarComida = lazy(() => import('./pages/RegistrarComida.jsx'))
 const AnadirAlimento = lazy(() => import('./pages/AnadirAlimento.jsx'))
 const Escanear = lazy(() => import('./pages/Escanear.jsx'))
 const ConfirmarEscaneo = lazy(() => import('./pages/ConfirmarEscaneo.jsx'))
+const AnalizarCarta = lazy(() => import('./pages/AnalizarCarta.jsx'))
+const ConfirmarCarta = lazy(() => import('./pages/ConfirmarCarta.jsx'))
 const Gastos = lazy(() => import('./pages/Gastos.jsx'))
 const Recetas = lazy(() => import('./pages/Recetas.jsx'))
 const Perfil = lazy(() => import('./pages/Perfil.jsx'))
@@ -33,7 +37,16 @@ export default function App() {
   const perfilCompleto = !!perfil?.tipo
 
   // Rutas que NO llevan barra de navegación inferior
-  const sinBarra = ['/', '/login', '/registro', '/onboarding', '/escanear', '/confirmar-escaneo']
+  const sinBarra = [
+    '/',
+    '/login',
+    '/registro',
+    '/onboarding',
+    '/escanear',
+    '/confirmar-escaneo',
+    '/analizar-carta',
+    '/confirmar-carta',
+  ]
   const mostrarBarra =
     sesion && perfilCompleto && !sinBarra.includes(location.pathname)
 
@@ -73,13 +86,23 @@ export default function App() {
 
           {/* Requieren sesión + perfil completo */}
           <Route path="/despensa" element={<Protegida><Despensa /></Protegida>} />
-          <Route path="/diario" element={<Protegida><Diario /></Protegida>} />
-          <Route path="/diario/registrar" element={<Protegida><RegistrarComida /></Protegida>} />
+
+          {/* El diario solo existe en modo completo */}
+          <Route path="/diario" element={<SoloDiario><Diario /></SoloDiario>} />
+          <Route
+            path="/diario/registrar"
+            element={<SoloDiario><RegistrarComida /></SoloDiario>}
+          />
           <Route path="/anadir" element={<Protegida><AnadirAlimento /></Protegida>} />
           <Route path="/escanear" element={<Protegida><Escanear /></Protegida>} />
           <Route
             path="/confirmar-escaneo"
             element={<Protegida><ConfirmarEscaneo /></Protegida>}
+          />
+          <Route path="/analizar-carta" element={<Protegida><AnalizarCarta /></Protegida>} />
+          <Route
+            path="/confirmar-carta"
+            element={<Protegida><ConfirmarCarta /></Protegida>}
           />
           <Route path="/gastos" element={<Protegida><Gastos /></Protegida>} />
           <Route path="/recetas" element={<Protegida><Recetas /></Protegida>} />
@@ -93,6 +116,7 @@ export default function App() {
 
       <InstalarApp conBarra={mostrarBarra} />
       {mostrarBarra && <BottomNav />}
+      <TourGuiado activo={mostrarBarra && location.pathname === '/despensa'} />
     </PhoneFrame>
   )
 }
@@ -118,5 +142,16 @@ function Protegida({ children }) {
   const { sesion, perfil } = useAuth()
   if (!sesion) return <Navigate to="/" replace />
   if (!perfil?.tipo) return <Navigate to="/onboarding" replace />
+  return children
+}
+
+// Como `Protegida`, pero además exige un modo con diario. El modo simple no
+// lo tiene, así que si llega por URL escrita a mano o por un enlace viejo lo
+// devolvemos a su pantalla de inicio en vez de enseñarle una pantalla vacía.
+function SoloDiario({ children }) {
+  const { sesion, perfil } = useAuth()
+  if (!sesion) return <Navigate to="/" replace />
+  if (!perfil?.tipo) return <Navigate to="/onboarding" replace />
+  if (!funcionesDe(perfil.tipo).diario) return <Navigate to="/despensa" replace />
   return children
 }

@@ -23,10 +23,12 @@ export default function Bienvenida() {
           controla lo que gastas.
         </p>
 
+        {/* Nada de prometer macros aquí: eso depende del modo que elija
+            después, y el modo simple no los lleva. */}
         <div className="space-y-3 mb-2">
           <Ventaja icon={ScanLine} texto="Escanea tickets en segundos" />
-          <Ventaja icon={Carrot} texto="Controla calorías y macros" />
           <Ventaja icon={PieChart} texto="Visualiza en qué gastas" />
+          <Ventaja icon={Carrot} texto="Cocina con lo que ya tienes" />
         </div>
       </div>
 

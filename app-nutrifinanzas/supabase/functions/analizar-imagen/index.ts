@@ -48,15 +48,15 @@ Deno.serve(async (req) => {
       return jsonError('El servidor no tiene configurada la clave de Gemini.', 500)
     }
 
-    const { modo, imagenBase64, mimeType } = await req.json()
+    const { modo, imagenBase64, mimeType, objetivoRestante } = await req.json()
     if (!modo || !imagenBase64) {
       return jsonError('Faltan datos: modo o imagenBase64.', 400)
     }
-    if (modo !== 'ticket' && modo !== 'producto' && modo !== 'nutricion') {
-      return jsonError('modo debe ser "ticket", "producto" o "nutricion".', 400)
+    if (modo !== 'ticket' && modo !== 'producto' && modo !== 'nutricion' && modo !== 'carta') {
+      return jsonError('modo debe ser "ticket", "producto", "nutricion" o "carta".', 400)
     }
 
-    const prompt = construirPrompt(modo)
+    const prompt = modo === 'carta' ? construirPromptCarta(objetivoRestante) : construirPrompt(modo)
     const resultado = await llamarGemini(prompt, imagenBase64, mimeType || 'image/jpeg', modo)
 
     return new Response(JSON.stringify(resultado), {
@@ -64,6 +64,12 @@ Deno.serve(async (req) => {
     })
   } catch (e) {
     console.error('Error en analizar-imagen:', e)
+    if (e instanceof Error && e.message === 'CUOTA_EXCEDIDA') {
+      return jsonError(
+        'Se ha alcanzado el límite de peticiones a la IA por ahora. Espera unos minutos e inténtalo de nuevo.',
+        429
+      )
+    }
     return jsonError('No se pudo analizar la imagen.', 500)
   }
 })
@@ -143,11 +149,48 @@ Si en la imagen hay varios productos distintos, incluye uno por cada uno.
 Responde ÚNICAMENTE con el JSON, nada más.`
 }
 
+function construirPromptCarta(objetivoRestante: unknown) {
+  const base = `Eres un asistente que analiza fotos de cartas de restaurante.
+Identifica los platos legibles y estima sus macros aproximados a partir del nombre/
+descripción y del conocimiento general de cocina española/internacional.
+
+Devuelve SOLO un JSON (sin markdown, sin texto adicional) con esta forma exacta:
+
+{
+  "platos": [
+    {
+      "nombre": "...",
+      "kcal_estimado": numero_o_null,
+      "proteinas_estimado": numero_o_null,
+      "hidratos_estimado": numero_o_null,
+      "grasas_estimado": numero_o_null,
+      "confianza": "alta" | "media" | "baja"
+    }
+  ],
+  "recomendado_indice": indice_del_plato_recomendado,
+  "motivo": "frase corta explicando la recomendación"
+}`
+
+  const instrucciones =
+    objetivoRestante && typeof objetivoRestante === 'object'
+      ? `Al usuario le queda hoy este margen: ${JSON.stringify(objetivoRestante)} (kcal y gramos de
+proteína/hidratos/grasa). La recomendación debe priorizar el plato que mejor encaje en ese
+margen (sin pasarse de kcal, priorizando proteína si sobra margen).`
+      : `Recomienda el plato objetivamente más saludable (más proteína/verdura, menos frito/
+procesado, ración razonable).`
+
+  return `${base}
+
+${instrucciones}
+Dejar "confianza": "baja" en platos con descripción muy ambigua — no inventar datos.
+Responde ÚNICAMENTE con el JSON, nada más.`
+}
+
 async function llamarGemini(
   prompt: string,
   imagenBase64: string,
   mimeType: string,
-  modo: 'ticket' | 'producto' | 'nutricion',
+  modo: 'ticket' | 'producto' | 'nutricion' | 'carta',
 ) {
   const base64Limpio = imagenBase64.includes(',')
     ? imagenBase64.split(',')[1]
@@ -191,6 +234,13 @@ async function llamarGemini(
     }
 
     const texto = await respuesta.text()
+    if (respuesta.status === 429) {
+      // Cuota agotada (por minuto o por día): reintentarlo no sirve de nada
+      // y solo alarga la espera, así que se distingue de un error genérico
+      // para poder avisar al usuario con un mensaje que tiene sentido.
+      console.error(`Gemini 429 (cuota): ${texto}`)
+      throw new Error('CUOTA_EXCEDIDA')
+    }
     const esTransitorio = respuesta.status === 503
     if (!esTransitorio || intento === intentosMax) {
       throw new Error(`Gemini respondió ${respuesta.status}: ${texto}`)
@@ -202,9 +252,9 @@ async function llamarGemini(
   if (!texto) throw new Error('Gemini no devolvió contenido analizable.')
 
   const json = extraerJson(texto)
-  return modo === 'nutricion'
-    ? normalizarNutricion(json)
-    : normalizarResultado(json)
+  if (modo === 'nutricion') return normalizarNutricion(json)
+  if (modo === 'carta') return normalizarCarta(json)
+  return normalizarResultado(json)
 }
 
 // Por si el modelo envuelve el JSON en ```json ... ``` a pesar de pedirlo limpio
@@ -228,13 +278,15 @@ function normalizarResultado(json: any) {
   }
 }
 
+// Convierte a número no negativo o null; nunca inventa un valor a partir de texto inválido.
+function num(v: any) {
+  if (v === null || v === undefined || v === '') return null
+  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'))
+  return Number.isFinite(n) && n >= 0 ? n : null
+}
+
 // Normaliza la lectura de una etiqueta nutricional a valores por 100 g/ml.
 function normalizarNutricion(json: any) {
-  const num = (v: any) => {
-    if (v === null || v === undefined || v === '') return null
-    const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'))
-    return Number.isFinite(n) && n >= 0 ? n : null
-  }
   return {
     nutricion: {
       por: typeof json?.por === 'string' ? json.por : '100 g',
@@ -245,5 +297,46 @@ function normalizarNutricion(json: any) {
       azucares: num(json?.azucares),
       sal: num(json?.sal),
     },
+  }
+}
+
+const CONFIANZAS_VALIDAS = ['alta', 'media', 'baja']
+
+// Normaliza la lectura de una carta de restaurante: lista de platos con
+// macros estimados (nunca inventados si la descripción es ambigua) más el
+// índice recomendado y el motivo, en formato ya utilizable por la app.
+function normalizarCarta(json: any) {
+  const platosBrutos = Array.isArray(json?.platos) ? json.platos : []
+
+  // Se filtran los platos sin nombre, pero "recomendado_indice" que devuelve
+  // Gemini indexa el array ORIGINAL (platosBrutos). Si se filtrara después de
+  // mapear sin más, un plato descartado antes del recomendado desplazaría los
+  // índices y el badge "Recomendado" acabaría en el plato equivocado. Por eso
+  // se guarda el índice original de cada plato válido y se remapea al final.
+  const validos: { indiceOriginal: number; plato: any }[] = []
+  platosBrutos.forEach((p: any, indiceOriginal: number) => {
+    const nombre = String(p?.nombre || '').trim()
+    if (!nombre) return
+    validos.push({
+      indiceOriginal,
+      plato: {
+        nombre,
+        kcalEstimado: num(p?.kcal_estimado),
+        proteinasEstimado: num(p?.proteinas_estimado),
+        hidratosEstimado: num(p?.hidratos_estimado),
+        grasasEstimado: num(p?.grasas_estimado),
+        confianza: CONFIANZAS_VALIDAS.includes(p?.confianza) ? p.confianza : 'baja',
+      },
+    })
+  })
+
+  const platos = validos.map((v) => v.plato)
+  const indiceBruto = Number.isInteger(json?.recomendado_indice) ? json.recomendado_indice : 0
+  const recomendadoIndice = validos.findIndex((v) => v.indiceOriginal === indiceBruto)
+
+  return {
+    platos,
+    recomendadoIndice: recomendadoIndice >= 0 ? recomendadoIndice : 0,
+    motivo: typeof json?.motivo === 'string' ? json.motivo.trim() : '',
   }
 }

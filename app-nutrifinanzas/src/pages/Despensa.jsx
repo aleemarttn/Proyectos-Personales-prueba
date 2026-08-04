@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, ScanLine, Trash2, Flame, Loader2, ChevronRight } from 'lucide-react'
+import { Plus, ScanLine, UtensilsCrossed, Trash2, Flame, Loader2, ChevronRight } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { colorCategoria } from '../data/categorias.js'
@@ -35,7 +35,7 @@ export default function Despensa() {
       </div>
 
       {/* Botones de acción */}
-      <div className="px-5 flex gap-3 mb-5">
+      <div data-tour="despensa-acciones" className="px-5 flex gap-3 mb-5">
         <button
           onClick={() => navigate('/anadir')}
           className="flex-1 bg-white text-brand-700 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-card active:scale-[0.98] transition"
@@ -47,6 +47,19 @@ export default function Despensa() {
           className="flex-1 bg-brand-500 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-soft active:scale-[0.98] transition"
         >
           <ScanLine size={20} /> Escanear
+        </button>
+      </div>
+
+      {/* Modo Restaurante: fotografiar la carta y que te recomiende un
+          plato (PLAN-modo-restaurante.md). Fila propia porque no compite
+          con "Añadir"/"Escanear" (esos van a la despensa; esto va al Diario
+          o solo a una recomendación, según el modo). */}
+      <div data-tour="foto-restaurante" className="px-5 mb-5">
+        <button
+          onClick={() => navigate('/analizar-carta')}
+          className="w-full bg-white text-brand-700 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-card active:scale-[0.98] transition"
+        >
+          <UtensilsCrossed size={20} /> Foto del restaurante
         </button>
       </div>
 
@@ -69,7 +82,7 @@ export default function Despensa() {
       )}
 
       {/* Lista de alimentos */}
-      <div className="px-5 pb-6 space-y-3">
+      <div data-tour="despensa-lista" className="px-5 pb-6 space-y-3">
         {cargando && (
           <div className="flex justify-center py-16">
             <Loader2 className="animate-spin text-brand-400" size={28} />

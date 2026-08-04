@@ -9,20 +9,23 @@ import {
   Loader2,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
+import { SIMPLE, COMPLETO, funcionesDe } from '../lib/modos.js'
 
-// Onboarding en pasos:
-//   Paso 1: elegir vía (Control total / Sencilla)
-//   Paso 2: rellenar datos
-//   Paso 3: (solo Control total) objetivos de macros
-//   Final: guardar y entrar
+// Lo PRIMERO que se decide al crear la cuenta es para qué se quiere la app.
+// De esa respuesta cuelga todo lo demás, incluido cuántos datos se piden:
+//   Paso 1: elegir modo (simple / completo)
+//   Paso 2: datos — en simple solo nombre y código postal
+//   Paso 3: objetivos de macros (solo completo)
 export default function Onboarding() {
   const navigate = useNavigate()
   const { guardarPerfil } = useAuth()
 
   const [paso, setPaso] = useState(1)
-  const [tipo, setTipo] = useState(null) // 'total' | 'sencilla'
+  const [tipo, setTipo] = useState(null) // SIMPLE | COMPLETO
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
+
+  const funciones = funcionesDe(tipo)
 
   // Datos básicos comunes
   const [datos, setDatos] = useState({
@@ -54,10 +57,11 @@ export default function Onboarding() {
       await guardarPerfil({
         tipo,
         nombre: datos.nombre.trim() || 'Invitado',
-        edad: datos.edad,
-        genero: datos.genero,
+        // En modo simple no se piden ni se guardan: no hacen falta para nada.
+        edad: funciones.datosPersonales ? datos.edad : '',
+        genero: funciones.datosPersonales ? datos.genero : null,
         codigoPostal: datos.codigoPostal,
-        macros: tipo === 'total' ? macros : null,
+        macros: funciones.macros ? macros : null,
       })
       navigate('/despensa')
     } catch (e) {
@@ -78,7 +82,7 @@ export default function Onboarding() {
           <ArrowLeft size={20} />
         </button>
         <div className="flex-1 flex gap-1.5">
-          {[1, 2, tipo === 'total' ? 3 : null].filter(Boolean).map((p) => (
+          {[1, 2, funciones.macros ? 3 : null].filter(Boolean).map((p) => (
             <div
               key={p}
               className={`h-1.5 flex-1 rounded-full transition-colors ${
@@ -94,41 +98,39 @@ export default function Onboarding() {
         {paso === 1 && (
           <div className="animate-slide-up">
             <h2 className="text-2xl font-black text-gray-800 mt-4 mb-1">
-              ¿Cómo quieres usar la app?
+              ¿Para qué quieres la app?
             </h2>
             <p className="text-gray-500 mb-6">
-              Puedes cambiar de opinión más adelante.
+              Puedes cambiar de modo cuando quieras desde tu perfil.
             </p>
 
-            <button
-              onClick={() => elegir('total')}
-              className="w-full text-left bg-white rounded-3xl p-5 shadow-card mb-4 border-2 border-transparent active:border-brand-300 active:scale-[0.99] transition"
-            >
-              <div className="w-12 h-12 rounded-2xl bg-brand-100 text-brand-600 flex items-center justify-center mb-3">
-                <Target size={24} />
-              </div>
-              <h3 className="font-extrabold text-lg text-gray-800">
-                Control total
-              </h3>
-              <p className="text-gray-500 text-sm mt-1">
-                Datos básicos + objetivos de calorías y macros (hidratos,
-                proteínas y grasas).
-              </p>
-            </button>
+            <TarjetaModo
+              icon={Sparkles}
+              color="amber"
+              titulo="Modo simple"
+              resumen="Controlar la compra y cocinar con lo que ya tienes."
+              incluye={[
+                'Tu despensa y lo que vale',
+                'En qué te gastas el dinero del súper',
+                'Recetas con lo que tienes en casa',
+              ]}
+              nota="Solo te pedimos el nombre y el código postal."
+              onClick={() => elegir(SIMPLE)}
+            />
 
-            <button
-              onClick={() => elegir('sencilla')}
-              className="w-full text-left bg-white rounded-3xl p-5 shadow-card border-2 border-transparent active:border-brand-300 active:scale-[0.99] transition"
-            >
-              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mb-3">
-                <Sparkles size={24} />
-              </div>
-              <h3 className="font-extrabold text-lg text-gray-800">Sencilla</h3>
-              <p className="text-gray-500 text-sm mt-1">
-                Solo lo esencial: nombre, edad, género y código postal. Sin
-                macros.
-              </p>
-            </button>
+            <TarjetaModo
+              icon={Target}
+              color="brand"
+              titulo="Modo completo"
+              resumen="Todo lo anterior y además el control de lo que comes."
+              incluye={[
+                'Todo el modo simple',
+                'Diario de comidas con calorías y macros',
+                'Objetivos diarios y recetas que encajan en ellos',
+              ]}
+              nota="Te pedimos algún dato más para calcular tus objetivos."
+              onClick={() => elegir(COMPLETO)}
+            />
           </div>
         )}
 
@@ -139,9 +141,9 @@ export default function Onboarding() {
               Cuéntanos sobre ti
             </h2>
             <p className="text-gray-500 mb-6">
-              {tipo === 'total'
-                ? 'Datos básicos para personalizar tu experiencia.'
-                : 'Solo necesitamos unos pocos datos.'}
+              {funciones.datosPersonales
+                ? 'La edad y el género nos sirven para afinar tus objetivos.'
+                : 'Con esto basta. El código postal es para los precios de tu zona.'}
             </p>
 
             <Campo
@@ -150,32 +152,38 @@ export default function Onboarding() {
               onChange={(v) => setDatos({ ...datos, nombre: v })}
               placeholder="Ej. Laura"
             />
-            <Campo
-              label="Edad"
-              tipo="number"
-              valor={datos.edad}
-              onChange={(v) => setDatos({ ...datos, edad: v })}
-              placeholder="Ej. 32"
-            />
 
-            <label className="block text-sm font-bold text-gray-600 mb-2 mt-4">
-              Género
-            </label>
-            <div className="flex gap-2 mb-1">
-              {['Mujer', 'Hombre', 'Otro'].map((g) => (
-                <button
-                  key={g}
-                  onClick={() => setDatos({ ...datos, genero: g })}
-                  className={`flex-1 py-3 rounded-2xl font-bold text-sm transition ${
-                    datos.genero === g
-                      ? 'bg-brand-500 text-white shadow-soft'
-                      : 'bg-white text-gray-500 shadow-card'
-                  }`}
-                >
-                  {g}
-                </button>
-              ))}
-            </div>
+            {/* Edad y género solo se piden si van a usarse (modo completo) */}
+            {funciones.datosPersonales && (
+              <>
+                <Campo
+                  label="Edad"
+                  tipo="number"
+                  valor={datos.edad}
+                  onChange={(v) => setDatos({ ...datos, edad: v })}
+                  placeholder="Ej. 32"
+                />
+
+                <label className="block text-sm font-bold text-gray-600 mb-2 mt-4">
+                  Género
+                </label>
+                <div className="flex gap-2 mb-1">
+                  {['Mujer', 'Hombre', 'Otro'].map((g) => (
+                    <button
+                      key={g}
+                      onClick={() => setDatos({ ...datos, genero: g })}
+                      className={`flex-1 py-3 rounded-2xl font-bold text-sm transition ${
+                        datos.genero === g
+                          ? 'bg-brand-500 text-white shadow-soft'
+                          : 'bg-white text-gray-500 shadow-card'
+                      }`}
+                    >
+                      {g}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
 
             <Campo
               label="Código postal"
@@ -184,16 +192,16 @@ export default function Onboarding() {
               placeholder="Ej. 28013"
             />
 
-            {error && tipo !== 'total' && (
+            {error && !funciones.macros && (
               <p className="bg-red-50 text-red-600 text-sm font-semibold rounded-xl px-4 py-3 mt-4">
                 {error}
               </p>
             )}
 
             <BotonContinuar
-              onClick={() => (tipo === 'total' ? setPaso(3) : finalizar())}
+              onClick={() => (funciones.macros ? setPaso(3) : finalizar())}
               cargando={guardando}
-              texto={tipo === 'total' ? 'Continuar' : 'Crear perfil'}
+              texto={funciones.macros ? 'Continuar' : 'Empezar'}
             />
           </div>
         )}
@@ -268,6 +276,41 @@ export default function Onboarding() {
 }
 
 // --- Componentes auxiliares ---
+
+// Tarjeta de elección de modo. Enseña lo que CADA modo trae, no lo que le
+// falta: el modo simple no es una versión recortada, es otra forma de usarla.
+function TarjetaModo({ icon: Icon, color, titulo, resumen, incluye, nota, onClick }) {
+  const tonos = {
+    amber: 'bg-amber-100 text-amber-600',
+    brand: 'bg-brand-100 text-brand-600',
+  }
+
+  return (
+    <button
+      onClick={onClick}
+      className="w-full text-left bg-white rounded-3xl p-5 shadow-card mb-4 border-2 border-transparent active:border-brand-300 active:scale-[0.99] transition"
+    >
+      <div
+        className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-3 ${tonos[color]}`}
+      >
+        <Icon size={24} />
+      </div>
+      <h3 className="font-extrabold text-lg text-gray-800">{titulo}</h3>
+      <p className="text-gray-500 text-sm mt-1 mb-3">{resumen}</p>
+
+      <ul className="space-y-1.5">
+        {incluye.map((linea) => (
+          <li key={linea} className="flex items-start gap-2 text-sm text-gray-600">
+            <Check size={16} className="text-brand-500 shrink-0 mt-0.5" />
+            <span className="font-semibold">{linea}</span>
+          </li>
+        ))}
+      </ul>
+
+      <p className="text-xs text-gray-400 font-semibold mt-3">{nota}</p>
+    </button>
+  )
+}
 
 function Campo({ label, valor, onChange, placeholder, tipo = 'text' }) {
   return (

@@ -159,6 +159,33 @@ export function AuthProvider({ children }) {
     setPerfil(filaAPerfil(data))
   }
 
+  // Cambia de modo sin tocar nada más. Al pasar a simple NO se borra nada:
+  // los macros se quedan en su columna y el diario en su tabla, solo dejan de
+  // mostrarse. Volver a completo lo recupera todo tal y como estaba.
+  // Al subir a completo hay que pasar `macros`, porque sin objetivos el diario
+  // no tendría contra qué comparar.
+  async function cambiarModo(tipo, macros = null) {
+    if (!sesion) throw new Error('No hay sesión activa')
+
+    const fila = { tipo_perfil: tipo }
+    if (macros) {
+      fila.macros_kcal = macros.kcal
+      fila.macros_hidratos = macros.hidratos
+      fila.macros_proteinas = macros.proteinas
+      fila.macros_grasas = macros.grasas
+    }
+
+    const { data, error } = await supabase
+      .from('perfiles')
+      .update(fila)
+      .eq('id', sesion.user.id)
+      .select()
+      .single()
+
+    if (error) throw error
+    setPerfil(filaAPerfil(data))
+  }
+
   const value = {
     sesion,
     perfil,
@@ -167,6 +194,7 @@ export function AuthProvider({ children }) {
     iniciarSesion,
     cerrarSesion,
     guardarPerfil,
+    cambiarModo,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
