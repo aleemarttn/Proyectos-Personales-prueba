@@ -98,7 +98,7 @@ export default function AnalizarCarta() {
           <div className="w-16 h-16 rounded-2xl bg-brand-500/20 flex items-center justify-center mb-5">
             <UtensilsCrossed size={30} className="text-brand-400" />
           </div>
-          <p className="font-bold text-lg mb-1.5">Foto del restaurante</p>
+          <p className="font-bold text-lg mb-1.5">¿Qué pido?</p>
           <p className="text-white/60 text-sm mb-8 max-w-[260px]">
             Haz una foto nítida de la carta, con los platos y sus nombres visibles.
           </p>

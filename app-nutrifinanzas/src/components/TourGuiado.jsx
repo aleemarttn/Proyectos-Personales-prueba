@@ -41,7 +41,7 @@ const PASOS_BASE = [
     selector: '[data-tour="foto-restaurante"]',
     icon: UtensilsCrossed,
     color: 'amber',
-    titulo: 'Foto del restaurante',
+    titulo: '¿Qué pido?',
     texto: '¿Comes fuera? Haz una foto a la carta y te recomendamos qué pedir.',
   },
   {

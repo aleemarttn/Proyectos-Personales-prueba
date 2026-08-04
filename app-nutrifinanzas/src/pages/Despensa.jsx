@@ -59,7 +59,7 @@ export default function Despensa() {
           onClick={() => navigate('/analizar-carta')}
           className="w-full bg-white text-brand-700 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-card active:scale-[0.98] transition"
         >
-          <UtensilsCrossed size={20} /> Foto del restaurante
+          <UtensilsCrossed size={20} /> ¿Qué pido?
         </button>
       </div>
 
