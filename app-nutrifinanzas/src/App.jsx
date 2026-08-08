@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from './context/AuthContext.jsx'
-import { funcionesDe } from './lib/modos.js'
+import { funcionesDe, rutaInicio } from './lib/modos.js'
 import PhoneFrame from './components/PhoneFrame.jsx'
 import BottomNav from './components/BottomNav.jsx'
 import InstalarApp from './components/InstalarApp.jsx'
@@ -76,7 +76,7 @@ export default function App() {
             element={
               <SoloSesion>
                 {perfilCompleto ? (
-                  <Navigate to="/despensa" replace />
+                  <Navigate to={rutaInicio(perfil.tipo)} replace />
                 ) : (
                   <Onboarding />
                 )}

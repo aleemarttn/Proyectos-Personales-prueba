@@ -1,17 +1,19 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from './AuthContext.jsx'
+import { hoyISO, semanaDe, sumarDias } from '../lib/fechas.js'
 
 // Este contexto guarda el DIARIO de consumo (tabla `registros_diarios`,
-// lo que te has comido hoy), las COMIDAS del día del usuario (tabla
-// `comidas_usuario`: editables, máximo 7) y el resumen objetivo/consumido/
-// restante (vista `resumen_diario`). Cada usuario solo ve lo suyo (RLS).
+// lo que te has comido), las COMIDAS del día del usuario (tabla
+// `comidas_usuario`: editables, máximo 7) y los objetivos de macros
+// (vista `resumen_diario`). Cada usuario solo ve lo suyo (RLS).
+//
+// El diario se mueve por días: `fecha` es el día que se está mirando. Se
+// descarga la SEMANA entera de una vez (una sola consulta) porque la tira
+// de días del dashboard necesita el total de cada día, no solo el del que
+// está seleccionado.
 
 const DiarioContext = createContext(null)
-
-function hoyISO() {
-  return new Date().toISOString().slice(0, 10)
-}
 
 // Convierte una fila de `registros_diarios` al formato de las pantallas.
 function filaARegistro(fila) {
@@ -40,6 +42,11 @@ function filaAComida(fila) {
 
 // Convierte la fila de la vista `resumen_diario` (no existe en modo simple:
 // la vista filtra por tipo_perfil = 'total', ver migración 005).
+//
+// La vista calcula lo consumido de HOY (su SQL fija `fecha = current_date`),
+// así que sus campos `...ConsumidoHoy` son siempre los de hoy, mires el día
+// que mires. Lo que usa el dashboard para el día seleccionado es
+// `resumenDia`, más abajo; de aquí solo se aprovechan los objetivos.
 function filaAResumen(fila) {
   if (!fila) return null
   return {
@@ -55,13 +62,25 @@ function filaAResumen(fila) {
   }
 }
 
+function sumar(registros, campo) {
+  return registros.reduce((total, r) => total + (r[campo] || 0), 0)
+}
+
 export function DiarioProvider({ children }) {
   const { sesion } = useAuth()
-  const [registrosHoy, setRegistrosHoy] = useState([])
+
+  // Día que se está mirando en el diario ('YYYY-MM-DD', hora local)
+  const [fecha, setFecha] = useState(hoyISO())
+  // Registros de la semana COMPLETA a la que pertenece `fecha`
+  const [registros, setRegistros] = useState([])
   const [comidas, setComidas] = useState([])
   const [resumen, setResumen] = useState(null)
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState('')
+
+  const semana = useMemo(() => semanaDe(fecha), [fecha])
+  // Solo se vuelve a descargar al cambiar de semana, no al cambiar de día
+  const claveSemana = semana[0]
 
   async function cargarResumen() {
     const { data, error: err } = await supabase
@@ -76,37 +95,22 @@ export function DiarioProvider({ children }) {
     setResumen(filaAResumen(data))
   }
 
+  // Objetivos + comidas del día: no dependen de la fecha, se cargan una vez
+  // por sesión.
   useEffect(() => {
     if (!sesion) {
-      setRegistrosHoy([])
       setComidas([])
       setResumen(null)
       return
     }
 
     let activo = true
-    setCargando(true)
-    setError('')
 
     Promise.all([
-      supabase
-        .from('registros_diarios')
-        .select('*')
-        .eq('fecha', hoyISO())
-        .order('created_at', { ascending: true }),
       supabase.from('resumen_diario').select('*').maybeSingle(),
-      supabase
-        .from('comidas_usuario')
-        .select('*')
-        .order('orden', { ascending: true }),
-    ]).then(([registros, resumenFila, comidasFilas]) => {
+      supabase.from('comidas_usuario').select('*').order('orden', { ascending: true }),
+    ]).then(([resumenFila, comidasFilas]) => {
       if (!activo) return
-      if (registros.error) {
-        console.error('Error cargando el diario de hoy:', registros.error)
-        setError('No se pudo cargar tu diario de hoy.')
-      } else {
-        setRegistrosHoy(registros.data.map(filaARegistro))
-      }
       if (resumenFila.error) {
         console.error('Error cargando el resumen diario:', resumenFila.error)
       } else {
@@ -117,7 +121,6 @@ export function DiarioProvider({ children }) {
       } else {
         setComidas(comidasFilas.data.map(filaAComida))
       }
-      setCargando(false)
     })
 
     return () => {
@@ -125,9 +128,78 @@ export function DiarioProvider({ children }) {
     }
   }, [sesion])
 
+  // Registros de la semana visible
+  useEffect(() => {
+    if (!sesion) {
+      setRegistros([])
+      setFecha(hoyISO())
+      return
+    }
+
+    let activo = true
+    setCargando(true)
+    setError('')
+
+    supabase
+      .from('registros_diarios')
+      .select('*')
+      .gte('fecha', claveSemana)
+      .lte('fecha', sumarDias(claveSemana, 6))
+      .order('created_at', { ascending: true })
+      .then(({ data, error: err }) => {
+        if (!activo) return
+        if (err) {
+          console.error('Error cargando el diario:', err)
+          setError('No se pudo cargar tu diario.')
+        } else {
+          setRegistros(data.map(filaARegistro))
+        }
+        setCargando(false)
+      })
+
+    return () => {
+      activo = false
+    }
+  }, [sesion, claveSemana])
+
+  // Lo registrado el día seleccionado
+  const registrosDia = useMemo(
+    () => registros.filter((r) => r.fecha === fecha),
+    [registros, fecha]
+  )
+
+  // kcal por día de la semana visible, para la tira de días del dashboard
+  const kcalPorDia = useMemo(() => {
+    const totales = {}
+    for (const dia of semana) totales[dia] = 0
+    for (const r of registros) {
+      if (r.fecha in totales) totales[r.fecha] += r.kcal
+    }
+    return totales
+  }, [registros, semana])
+
+  // Objetivo (de la vista) vs. consumido el día seleccionado (calculado aquí).
+  // La vista solo sabe de hoy, así que el "cuánto llevas" de cualquier otro
+  // día se suma en el cliente, con los registros que ya están descargados.
+  const resumenDia = useMemo(() => {
+    if (!resumen) return null
+    const kcalConsumido = sumar(registrosDia, 'kcal')
+    return {
+      kcalObjetivo: resumen.kcalObjetivo,
+      proteinasGObjetivo: resumen.proteinasGObjetivo,
+      hidratosGObjetivo: resumen.hidratosGObjetivo,
+      grasasGObjetivo: resumen.grasasGObjetivo,
+      kcalConsumido,
+      proteinasConsumido: sumar(registrosDia, 'proteinas'),
+      hidratosConsumido: sumar(registrosDia, 'hidratos'),
+      grasasConsumido: sumar(registrosDia, 'grasas'),
+      kcalRestante: resumen.kcalObjetivo - kcalConsumido,
+    }
+  }, [resumen, registrosDia])
+
   // --- Acciones sobre el diario ---
 
-  // origen: 'despensa' | 'catalogo' | 'manual'
+  // origen: 'despensa' | 'catalogo' | 'manual' | 'restaurante' | 'receta'
   function registroAFila(registro, origen) {
     return {
       usuario_id: sesion.user.id,
@@ -141,6 +213,10 @@ export function DiarioProvider({ children }) {
       proteinas: registro.proteinas ?? null,
       hidratos: registro.hidratos ?? null,
       grasas: registro.grasas ?? null,
+      // Explícita y en hora local: si se deja al `default current_date` de la
+      // tabla, el servidor pone SU fecha (UTC) y de madrugada cae en el día
+      // anterior. Además es lo que permite registrar en un día pasado.
+      fecha: registro.fecha || fecha,
       origen,
     }
   }
@@ -148,10 +224,10 @@ export function DiarioProvider({ children }) {
   // Uno o varios alimentos de una sentada (una comida como "arroz con pechuga y
   // huevo" son tres registros). Un solo INSERT y un solo recálculo del
   // resumen, en vez de uno por alimento. Cada registro trae su `origen`.
-  async function agregarRegistros(registros) {
-    if (registros.length === 0) return []
+  async function agregarRegistros(nuevosRegistros) {
+    if (nuevosRegistros.length === 0) return []
 
-    const filas = registros.map((r) => registroAFila(r, r.origen || 'manual'))
+    const filas = nuevosRegistros.map((r) => registroAFila(r, r.origen || 'manual'))
     const { data, error: err } = await supabase
       .from('registros_diarios')
       .insert(filas)
@@ -160,7 +236,7 @@ export function DiarioProvider({ children }) {
     if (err) throw err
 
     const nuevos = data.map(filaARegistro)
-    setRegistrosHoy((prev) => [...prev, ...nuevos])
+    setRegistros((prev) => [...prev, ...nuevos])
     await cargarResumen()
     return nuevos
   }
@@ -168,7 +244,7 @@ export function DiarioProvider({ children }) {
   async function eliminarRegistro(id) {
     const { error: err } = await supabase.from('registros_diarios').delete().eq('id', id)
     if (err) throw err
-    setRegistrosHoy((prev) => prev.filter((r) => r.id !== id))
+    setRegistros((prev) => prev.filter((r) => r.id !== id))
     await cargarResumen()
   }
 
@@ -179,7 +255,7 @@ export function DiarioProvider({ children }) {
       .update({ comida_id: comidaId })
       .eq('id', id)
     if (err) throw err
-    setRegistrosHoy((prev) => prev.map((r) => (r.id === id ? { ...r, comidaId } : r)))
+    setRegistros((prev) => prev.map((r) => (r.id === id ? { ...r, comidaId } : r)))
   }
 
   // --- Acciones sobre las comidas del día ---
@@ -223,7 +299,7 @@ export function DiarioProvider({ children }) {
     const { error: err } = await supabase.from('comidas_usuario').delete().eq('id', id)
     if (err) throw err
     setComidas((prev) => prev.filter((c) => c.id !== id))
-    setRegistrosHoy((prev) =>
+    setRegistros((prev) =>
       prev.map((r) => (r.comidaId === id ? { ...r, comidaId: null } : r))
     )
   }
@@ -262,9 +338,17 @@ export function DiarioProvider({ children }) {
   }
 
   const value = {
-    registrosHoy,
+    fecha,
+    setFecha,
+    semana,
+    registrosDia,
+    kcalPorDia,
     comidas,
+    // `resumen` sigue siendo el de HOY: lo usan "¿Qué pido?" y las recetas
+    // para saber cuántas kcal te quedan ahora mismo, no el día que estés
+    // mirando en el diario.
     resumen,
+    resumenDia,
     cargando,
     error,
     agregarRegistros,

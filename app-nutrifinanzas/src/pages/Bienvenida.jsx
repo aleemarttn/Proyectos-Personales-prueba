@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { Leaf, ArrowRight, ScanLine, PieChart, Carrot } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
+import { rutaInicio } from '../lib/modos.js'
 
 // Pantalla de bienvenida (primera que se ve al abrir la app).
 export default function Bienvenida() {
@@ -35,7 +36,7 @@ export default function Bienvenida() {
       <div className="space-y-3">
         {sesion && perfilCompleto ? (
           <button
-            onClick={() => navigate('/despensa')}
+            onClick={() => navigate(rutaInicio(perfil.tipo))}
             className="w-full bg-white text-brand-700 font-extrabold text-lg py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-soft"
           >
             Continuar como {perfil.nombre}

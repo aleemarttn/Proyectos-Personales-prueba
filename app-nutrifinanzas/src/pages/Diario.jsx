@@ -6,27 +6,53 @@ import {
   Loader2,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Settings2,
+  CalendarDays,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useDiario } from '../context/DiarioContext.jsx'
 import { horaCorta } from '../utils/formato.js'
 import { conUnidad } from '../utils/unidades.js'
+import {
+  INICIALES_SEMANA,
+  diaDelMes,
+  esFuturo,
+  esHoy,
+  etiquetaDia,
+  fechaLarga,
+  hoyISO,
+  sumarDias,
+} from '../lib/fechas.js'
 
-// Pantalla principal del diario: objetivo diario vs. consumido hoy, y las
-// comidas del día (editables en Perfil, máximo 7) con lo registrado en
-// cada una. El objetivo es GLOBAL del día, no por comida: cada sección
-// solo suma lo suyo.
+// Pantalla de inicio de la app en modo completo: qué llevas comido el día
+// que estás mirando y qué te queda. Arriba la tira de la semana (lunes a
+// domingo) para moverte por días; debajo el objetivo, los macros y las
+// comidas (editables en Perfil, máximo 7) con lo registrado en cada una.
+//
+// El objetivo de kcal es GLOBAL del día, no por comida: cada sección solo
+// suma lo suyo.
 //
 // Solo existe en modo completo; la ruta ya lo garantiza (ver App.jsx).
 export default function Diario() {
   const navigate = useNavigate()
-  const { registrosHoy, comidas, resumen, cargando, error, eliminarRegistro } = useDiario()
+  const {
+    fecha,
+    setFecha,
+    semana,
+    registrosDia,
+    kcalPorDia,
+    comidas,
+    resumenDia,
+    cargando,
+    error,
+    eliminarRegistro,
+  } = useDiario()
 
   // Comidas plegadas (por id). Por defecto todas abiertas.
   const [plegadas, setPlegadas] = useState({})
 
-  const kcalHoy = registrosHoy.reduce((s, r) => s + r.kcal, 0)
+  const kcalDia = registrosDia.reduce((s, r) => s + r.kcal, 0)
 
   function alternar(id) {
     setPlegadas((p) => ({ ...p, [id]: !p[id] }))
@@ -42,27 +68,55 @@ export default function Diario() {
 
   // Registros cuya comida se borró después de registrarlos: siguen contando
   // en el total del día, así que hay que poder verlos y recolocarlos.
-  const sinAsignar = registrosHoy.filter(
+  const sinAsignar = registrosDia.filter(
     (r) => !r.comidaId || !comidas.some((c) => c.id === r.comidaId)
   )
 
   return (
     <div className="bg-cream min-h-full animate-fade-in">
-      {/* Cabecera */}
-      <div className="px-5 pt-[calc(env(safe-area-inset-top)+1.75rem)] pb-4">
-        <p className="text-gray-400 font-semibold">Hoy</p>
-        <h1 className="text-2xl font-black text-gray-800">Tu diario</h1>
+      {/* Cabecera: qué día estás mirando */}
+      <div className="px-5 pt-[calc(env(safe-area-inset-top)+1.75rem)] pb-3 flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-black text-gray-800 truncate">
+            {etiquetaDia(fecha)}
+          </h1>
+          <p className="text-gray-400 font-semibold text-sm">{fechaLarga(fecha)}</p>
+        </div>
+
+        {/* Solo aparece cuando hace falta: si ya estás en hoy, no estorba */}
+        {!esHoy(fecha) && (
+          <button
+            onClick={() => setFecha(hoyISO())}
+            className="shrink-0 flex items-center gap-1.5 bg-white text-brand-700 font-bold text-sm px-3.5 py-2 rounded-xl shadow-card active:scale-95 transition"
+          >
+            <CalendarDays size={16} /> Hoy
+          </button>
+        )}
       </div>
 
+      <TiraSemana
+        semana={semana}
+        fecha={fecha}
+        kcalPorDia={kcalPorDia}
+        objetivo={resumenDia?.kcalObjetivo || 0}
+        onElegir={setFecha}
+        onSemanaAnterior={() => setFecha(sumarDias(fecha, -7))}
+        onSemanaSiguiente={() => setFecha(sumarDias(fecha, 7))}
+      />
+
       {/* Objetivo del día */}
-      <div className="px-5 mb-5">
-        {/* Si el resumen aún no ha llegado, al menos enseñamos lo acumulado */}
-        {resumen ? (
-          <ResumenDia resumen={resumen} />
+      <div className="px-5 mt-4 mb-4 space-y-3">
+        {/* Sin objetivos configurados no hay nada contra lo que comparar,
+            pero lo comido sí se puede enseñar. */}
+        {resumenDia ? (
+          <>
+            <TarjetaCalorias resumen={resumenDia} />
+            <TarjetaMacros resumen={resumenDia} />
+          </>
         ) : (
           <div className="bg-white rounded-3xl p-4 shadow-card">
             <div className="flex items-center justify-center gap-2 bg-brand-50 text-brand-700 font-extrabold rounded-2xl py-3">
-              <Flame size={20} /> {Math.round(kcalHoy)} kcal registradas hoy
+              <Flame size={20} /> {Math.round(kcalDia)} kcal registradas
             </div>
           </div>
         )}
@@ -85,6 +139,13 @@ export default function Diario() {
       {/* Comidas del día */}
       {!cargando && (
         <div className="px-5 pb-6 space-y-3">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-lg font-black text-gray-800">Comidas</h2>
+            <span className="text-sm font-bold text-gray-400">
+              {Math.round(kcalDia)} kcal
+            </span>
+          </div>
+
           {/* Sin comidas configuradas no habría ningún sitio donde registrar,
               así que dejamos siempre una vía directa. */}
           {comidas.length === 0 && (
@@ -106,7 +167,7 @@ export default function Diario() {
             <SeccionComida
               key={comida.id}
               comida={comida}
-              registros={registrosHoy.filter((r) => r.comidaId === comida.id)}
+              registros={registrosDia.filter((r) => r.comidaId === comida.id)}
               plegada={!!plegadas[comida.id]}
               onAlternar={() => alternar(comida.id)}
               onAnadir={() => navigate(`/diario/registrar?comida=${comida.id}`)}
@@ -136,62 +197,220 @@ export default function Diario() {
   )
 }
 
-// Cabecera con el objetivo diario global: consumido/objetivo, barra de
-// progreso y macros.
-function ResumenDia({ resumen }) {
-  const restante = Math.round(resumen.kcalRestanteHoy)
+// Tira de los 7 días de la semana (lunes a domingo). Cada día lleva un aro
+// que se va llenando con lo comido ese día respecto al objetivo, así de un
+// vistazo se ve la semana entera sin entrar en cada día.
+function TiraSemana({
+  semana,
+  fecha,
+  kcalPorDia,
+  objetivo,
+  onElegir,
+  onSemanaAnterior,
+  onSemanaSiguiente,
+}) {
+  return (
+    <div className="px-2 flex items-center gap-0.5">
+      <FlechaSemana onClick={onSemanaAnterior} aria-label="Semana anterior">
+        <ChevronLeft size={18} />
+      </FlechaSemana>
+
+      <div className="flex-1 flex justify-between">
+        {semana.map((dia, i) => (
+          <DiaSemana
+            key={dia}
+            dia={dia}
+            inicial={INICIALES_SEMANA[i]}
+            kcal={kcalPorDia[dia] || 0}
+            objetivo={objetivo}
+            activo={dia === fecha}
+            onClick={() => onElegir(dia)}
+          />
+        ))}
+      </div>
+
+      <FlechaSemana onClick={onSemanaSiguiente} aria-label="Semana siguiente">
+        <ChevronRight size={18} />
+      </FlechaSemana>
+    </div>
+  )
+}
+
+function FlechaSemana({ onClick, children, ...props }) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-7 h-11 flex items-center justify-center text-gray-300 active:text-gray-500 active:scale-90 transition shrink-0"
+      {...props}
+    >
+      {children}
+    </button>
+  )
+}
+
+function DiaSemana({ dia, inicial, kcal, objetivo, activo, onClick }) {
+  const pct = objetivo > 0 ? Math.min(1, kcal / objetivo) : 0
+  const futuro = esFuturo(dia)
+  const hoy = esHoy(dia)
+
+  // Aro de progreso: un círculo SVG al que se le recorta el trazo, poniendo
+  // el dasharray a su propio perímetro y desplazándolo.
+  // El radio (18) tiene que dejar hueco con el número de dentro (círculo de
+  // 28 px, radio 14): con radios parecidos el aro se funde con el fondo verde
+  // del día seleccionado y el progreso deja de verse.
+  const radio = 18
+  const perimetro = 2 * Math.PI * radio
+
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-col items-center gap-1 px-0.5 py-1 rounded-xl active:scale-95 transition min-w-[40px]"
+      aria-label={`${etiquetaDia(dia)}, ${Math.round(kcal)} kcal`}
+      aria-current={activo ? 'date' : undefined}
+    >
+      <span
+        className={`text-[11px] font-black ${
+          activo ? 'text-brand-600' : futuro ? 'text-gray-300' : 'text-gray-400'
+        }`}
+      >
+        {inicial}
+      </span>
+
+      <span className="relative w-10 h-10 flex items-center justify-center">
+        <svg className="absolute inset-0 -rotate-90" viewBox="0 0 40 40">
+          <circle
+            cx="20"
+            cy="20"
+            r={radio}
+            fill="none"
+            strokeWidth="3"
+            className={activo ? 'stroke-brand-200' : 'stroke-gray-200'}
+          />
+          {pct > 0 && (
+            <circle
+              cx="20"
+              cy="20"
+              r={radio}
+              fill="none"
+              strokeWidth="3"
+              strokeLinecap="round"
+              // En el día activo el número va sobre un círculo brand-500, así
+              // que el aro tira a un verde más oscuro para no fundirse con él.
+              className={`transition-all ${activo ? 'stroke-brand-700' : 'stroke-brand-500'}`}
+              strokeDasharray={perimetro}
+              strokeDashoffset={perimetro * (1 - pct)}
+            />
+          )}
+        </svg>
+
+        <span
+          className={`relative text-sm font-black rounded-full w-7 h-7 flex items-center justify-center ${
+            activo
+              ? 'bg-brand-500 text-white'
+              : futuro
+                ? 'text-gray-300'
+                : 'text-gray-600'
+          }`}
+        >
+          {diaDelMes(dia)}
+        </span>
+      </span>
+
+      {/* Punto que marca el día de hoy cuando estás mirando otro */}
+      <span
+        className={`w-1 h-1 rounded-full ${
+          hoy && !activo ? 'bg-brand-500' : 'bg-transparent'
+        }`}
+      />
+    </button>
+  )
+}
+
+// Consumido / objetivo del día, con lo que queda destacado: es el número
+// que de verdad se mira antes de decidir qué cenar.
+function TarjetaCalorias({ resumen }) {
+  const restante = Math.round(resumen.kcalRestante)
   const pasado = restante < 0
   const pct =
     resumen.kcalObjetivo > 0
-      ? Math.min(100, Math.round((resumen.kcalConsumidoHoy / resumen.kcalObjetivo) * 100))
+      ? Math.min(100, Math.round((resumen.kcalConsumido / resumen.kcalObjetivo) * 100))
       : 0
 
   return (
-    <div className="bg-white rounded-3xl p-4 shadow-card">
-      <div className="flex items-baseline justify-between mb-2">
-        <span className="font-extrabold text-gray-800 text-lg">
-          {Math.round(resumen.kcalConsumidoHoy)}
-          <span className="text-gray-300 font-bold"> / {resumen.kcalObjetivo} kcal</span>
-        </span>
-        <span className="text-sm font-bold text-gray-400">{pct}%</span>
+    <div className="bg-white rounded-3xl p-4 shadow-card animate-slide-up">
+      <div className="flex items-end justify-between mb-3">
+        <div>
+          <p className="text-sm font-bold text-gray-400 mb-0.5">Calorías</p>
+          <p className="text-2xl font-black text-gray-800 leading-none">
+            {Math.round(resumen.kcalConsumido)}
+            <span className="text-gray-300 text-lg"> / {resumen.kcalObjetivo}</span>
+          </p>
+        </div>
+        <div className="text-right">
+          <p
+            className={`text-2xl font-black leading-none ${
+              pasado ? 'text-red-500' : 'text-brand-600'
+            }`}
+          >
+            {Math.abs(restante)}
+          </p>
+          <p className="text-sm font-bold text-gray-400">
+            {pasado ? 'de más' : 'restan'}
+          </p>
+        </div>
       </div>
 
-      <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden mb-3">
+      <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all ${pasado ? 'bg-red-400' : 'bg-brand-500'}`}
+          className={`h-full rounded-full transition-all ${
+            pasado ? 'bg-red-400' : 'bg-brand-500'
+          }`}
           style={{ width: `${pct}%` }}
         />
       </div>
+    </div>
+  )
+}
 
-      <div
-        className={`flex items-center justify-center gap-2 font-extrabold rounded-2xl py-3 mb-4 ${
-          pasado ? 'bg-red-50 text-red-600' : 'bg-brand-50 text-brand-700'
-        }`}
-      >
-        <Flame size={20} />
-        {pasado
-          ? `Te has pasado ${Math.abs(restante)} kcal`
-          : `Te quedan ${restante} kcal hoy`}
-      </div>
+// Los tres macros en paralelo, para verlos de un vistazo sin scroll.
+function TarjetaMacros({ resumen }) {
+  return (
+    <div className="bg-white rounded-3xl p-4 shadow-card grid grid-cols-3 gap-3 animate-slide-up">
+      <Macro
+        label="Hidratos"
+        consumido={resumen.hidratosConsumido}
+        objetivo={resumen.hidratosGObjetivo}
+        color="#f59e0b"
+      />
+      <Macro
+        label="Grasas"
+        consumido={resumen.grasasConsumido}
+        objetivo={resumen.grasasGObjetivo}
+        color="#eab308"
+      />
+      <Macro
+        label="Proteínas"
+        consumido={resumen.proteinasConsumido}
+        objetivo={resumen.proteinasGObjetivo}
+        color="#ef4444"
+      />
+    </div>
+  )
+}
 
-      <div className="space-y-3">
-        <Barra
-          label="Proteínas"
-          consumido={resumen.proteinasConsumidoHoy}
-          objetivo={resumen.proteinasGObjetivo}
-          color="#ef4444"
-        />
-        <Barra
-          label="Hidratos"
-          consumido={resumen.hidratosConsumidoHoy}
-          objetivo={resumen.hidratosGObjetivo}
-          color="#f59e0b"
-        />
-        <Barra
-          label="Grasas"
-          consumido={resumen.grasasConsumidoHoy}
-          objetivo={resumen.grasasGObjetivo}
-          color="#eab308"
+function Macro({ label, consumido, objetivo, color }) {
+  const pct = objetivo > 0 ? Math.min(100, Math.round((consumido / objetivo) * 100)) : 0
+  return (
+    <div className="min-w-0">
+      <p className="text-xs font-bold text-gray-400 truncate">{label}</p>
+      <p className="font-black text-gray-800 leading-tight">
+        {Math.round(consumido)}
+        <span className="text-gray-300 text-sm font-bold"> / {Math.round(objetivo)} g</span>
+      </p>
+      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mt-1.5">
+        <div
+          className="h-full rounded-full transition-all"
+          style={{ width: `${pct}%`, backgroundColor: color }}
         />
       </div>
     </div>
@@ -276,27 +495,6 @@ function SeccionComida({ comida, registros, plegada, onAlternar, onAnadir, onEli
           )}
         </div>
       )}
-    </div>
-  )
-}
-
-// Barra de progreso consumido/objetivo para un macro (en gramos).
-function Barra({ label, consumido, objetivo, color }) {
-  const pct = objetivo > 0 ? Math.min(100, Math.round((consumido / objetivo) * 100)) : 0
-  return (
-    <div>
-      <div className="flex items-center justify-between text-sm mb-1">
-        <span className="font-semibold text-gray-600">{label}</span>
-        <span className="font-bold text-gray-800">
-          {Math.round(consumido)} / {Math.round(objetivo)} g
-        </span>
-      </div>
-      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all"
-          style={{ width: `${pct}%`, backgroundColor: color }}
-        />
-      </div>
     </div>
   )
 }

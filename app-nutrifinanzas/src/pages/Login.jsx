@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Leaf, Mail, Lock, ArrowRight, Loader2 } from 'lucide-react'
 import { useAuth, traducirErrorAuth } from '../context/AuthContext.jsx'
+import { rutaInicio } from '../lib/modos.js'
 import { CampoAuth } from './Registro.jsx'
 
 // Pantalla de inicio de sesión (email + contraseña).
@@ -21,7 +22,7 @@ export default function Login() {
     try {
       const perfil = await iniciarSesion(email.trim(), password)
       // Si el onboarding no está completo (tipo vacío), lo mandamos allí
-      navigate(perfil?.tipo ? '/despensa' : '/onboarding')
+      navigate(perfil?.tipo ? rutaInicio(perfil.tipo) : '/onboarding')
     } catch (err) {
       setError(traducirErrorAuth(err))
       setCargando(false)

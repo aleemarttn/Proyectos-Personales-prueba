@@ -30,6 +30,13 @@ export function funcionesDe(tipo) {
   return FUNCIONES[tipo] || FUNCIONES[SIMPLE]
 }
 
+// Pantalla de inicio de cada modo. En modo completo es el diario, que hace
+// de panel del día (cuánto llevas comido, cuánto te queda); el modo simple
+// no tiene diario, así que entra por la despensa.
+export function rutaInicio(tipo) {
+  return funcionesDe(tipo).diario ? '/diario' : '/despensa'
+}
+
 export function esCompleto(tipo) {
   return tipo === COMPLETO
 }

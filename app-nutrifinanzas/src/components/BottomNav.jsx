@@ -5,10 +5,11 @@ import { funcionesDe } from '../lib/modos.js'
 
 // Barra de navegación inferior, estilo app de móvil.
 // `requiere` marca las pestañas que solo existen en algunos modos: en modo
-// simple la barra se queda en cuatro (sin Diario).
+// simple la barra se queda en cuatro (sin Diario) y la primera pasa a ser
+// la despensa, que es su pantalla de inicio (ver `rutaInicio` en modos.js).
 const items = [
-  { to: '/despensa', icon: Package, label: 'Despensa' },
   { to: '/diario', icon: UtensilsCrossed, label: 'Diario', requiere: 'diario' },
+  { to: '/despensa', icon: Package, label: 'Despensa' },
   { to: '/gastos', icon: PieChart, label: 'Gastos' },
   { to: '/recetas', icon: ChefHat, label: 'Recetas' },
   { to: '/perfil', icon: User, label: 'Perfil' },

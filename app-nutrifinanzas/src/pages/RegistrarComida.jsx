@@ -15,6 +15,7 @@ import { useApp } from '../context/AppContext.jsx'
 import { useDiario } from '../context/DiarioContext.jsx'
 import { buscarProductosPorNombre } from '../lib/productos.js'
 import { comidaSugeridaPorHora } from '../lib/comidas.js'
+import { esHoy, etiquetaDia, fechaLarga } from '../lib/fechas.js'
 import SelectorUnidad from '../components/SelectorUnidad.jsx'
 import { unidadDe, conUnidad } from '../utils/unidades.js'
 
@@ -44,7 +45,9 @@ export default function RegistrarComida() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const { alimentos } = useApp()
-  const { agregarRegistros, comidas } = useDiario()
+  // `fecha` es el día que se está mirando en el diario: se registra ahí, no
+  // necesariamente en hoy (ver DiarioContext).
+  const { agregarRegistros, comidas, fecha } = useDiario()
 
   const [tab, setTab] = useState('despensa')
 
@@ -240,7 +243,8 @@ export default function RegistrarComida() {
         <h2 className="text-2xl font-black text-gray-800">¡Registrado!</h2>
         <p className="text-gray-500 mt-1">
           {guardados > 1 ? `${guardados} alimentos añadidos` : 'Añadido'}
-          {comidaElegida ? ` a "${comidaElegida.nombre}".` : ' a tu diario de hoy.'}
+          {comidaElegida ? ` a "${comidaElegida.nombre}"` : ' a tu diario'}
+          {esHoy(fecha) ? '.' : ` de ${etiquetaDia(fecha).toLowerCase()}.`}
         </p>
       </div>
     )
@@ -258,6 +262,17 @@ export default function RegistrarComida() {
         </button>
         <h1 className="text-xl font-black text-gray-800">Registrar comida</h1>
       </div>
+
+      {/* Si vienes de mirar otro día en el diario, se registra ahí y no en
+          hoy. Sin este aviso parece un fallo. */}
+      {!esHoy(fecha) && (
+        <div className="px-5 mt-3">
+          <p className="bg-amber-50 text-amber-700 text-sm font-semibold rounded-xl px-4 py-3">
+            Se guardará en el diario de {etiquetaDia(fecha).toLowerCase()},{' '}
+            {fechaLarga(fecha)}.
+          </p>
+        </div>
+      )}
 
       {/* A qué comida del día va */}
       {comidas.length > 0 && (

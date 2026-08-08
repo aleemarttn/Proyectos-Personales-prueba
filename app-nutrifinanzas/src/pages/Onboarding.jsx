@@ -66,6 +66,9 @@ export default function Onboarding() {
         provincia: datos.provincia,
         macros: funciones.macros ? macros : null,
       })
+      // A la despensa a propósito, aunque el inicio habitual sea el diario
+      // (ver `rutaInicio`): el tour de bienvenida vive aquí, y con el diario
+      // vacío no hay nada que enseñar hasta que tengas comida registrada.
       navigate('/despensa')
     } catch (e) {
       console.error('Error guardando el perfil:', e)
