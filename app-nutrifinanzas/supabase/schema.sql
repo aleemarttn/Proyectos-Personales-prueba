@@ -21,6 +21,12 @@ create table if not exists public.perfiles (
   macros_hidratos integer,
   macros_proteinas integer,
   macros_grasas   integer,
+  -- Ayuno intermitente (migración 013). La ventana se guarda como hora de
+  -- inicio + duración; la hora de fin siempre es una resta.
+  ayuno_activo    boolean not null default false,
+  ayuno_horas_objetivo smallint not null default 16
+    check (ayuno_horas_objetivo between 8 and 36),
+  ayuno_hora_inicio time not null default '21:00',
   created_at      timestamptz not null default now()
 );
 

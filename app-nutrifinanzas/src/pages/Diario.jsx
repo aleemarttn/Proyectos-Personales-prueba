@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useDiario } from '../context/DiarioContext.jsx'
+import TarjetaAyuno from '../components/TarjetaAyuno.jsx'
 import { horaCorta } from '../utils/formato.js'
 import { conUnidad } from '../utils/unidades.js'
 import {
@@ -120,6 +121,10 @@ export default function Diario() {
             </div>
           </div>
         )}
+
+        {/* El ayuno va de ahora mismo: mirando el lunes pasado no pinta
+            nada, así que solo aparece en el día de hoy. */}
+        {esHoy(fecha) && <TarjetaAyuno />}
       </div>
 
       {error && (

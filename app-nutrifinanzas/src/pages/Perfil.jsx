@@ -17,6 +17,7 @@ import {
 import { useAuth } from '../context/AuthContext.jsx'
 import { funcionesDe, nombreModo, esCompleto } from '../lib/modos.js'
 import EditorComidas from '../components/EditorComidas.jsx'
+import EditorAyuno from '../components/EditorAyuno.jsx'
 import CambiarModo from '../components/CambiarModo.jsx'
 
 // Pantalla de Perfil: los datos del onboarding, el modo activo (con la puerta
@@ -95,6 +96,10 @@ export default function Perfil() {
 
       {/* Comidas del día (editables, máximo 7). Solo tienen sentido con diario. */}
       {funciones.diario && <EditorComidas />}
+
+      {/* Ayuno intermitente: el contador vive en el diario, así que solo se
+          ofrece en los modos que lo tienen. */}
+      {funciones.diario && <EditorAyuno />}
 
       {/* Macros (solo modo completo) */}
       {funciones.macros && (

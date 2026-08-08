@@ -21,6 +21,14 @@ function filaAPerfil(fila) {
     provincia: fila.provincia,
     // tipo_perfil es null hasta que se completa el onboarding
     tipo: fila.tipo_perfil,
+    // Ayuno intermitente (migración 013). Si todavía no se ha aplicado, las
+    // columnas no llegan y queda desactivado, que es lo que toca: la app no
+    // enseña la tarjeta y no rompe nada.
+    ayuno: {
+      activo: !!fila.ayuno_activo,
+      horasObjetivo: Number(fila.ayuno_horas_objetivo ?? 16),
+      horaInicio: fila.ayuno_hora_inicio || '21:00:00',
+    },
     macros:
       fila.tipo_perfil === 'total'
         ? {
@@ -188,6 +196,27 @@ export function AuthProvider({ children }) {
     setPerfil(filaAPerfil(data))
   }
 
+  // Ajustes de ayuno intermitente (activarlo, horas objetivo y hora
+  // habitual de inicio). Van aparte de `guardarPerfil` porque se tocan
+  // desde Perfil y no en el onboarding.
+  async function guardarAyuno({ activo, horasObjetivo, horaInicio }) {
+    if (!sesion) throw new Error('No hay sesión activa')
+
+    const { data, error } = await supabase
+      .from('perfiles')
+      .update({
+        ayuno_activo: activo,
+        ayuno_horas_objetivo: horasObjetivo,
+        ayuno_hora_inicio: horaInicio,
+      })
+      .eq('id', sesion.user.id)
+      .select()
+      .single()
+
+    if (error) throw error
+    setPerfil(filaAPerfil(data))
+  }
+
   const value = {
     sesion,
     perfil,
@@ -197,6 +226,7 @@ export function AuthProvider({ children }) {
     cerrarSesion,
     guardarPerfil,
     cambiarModo,
+    guardarAyuno,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
