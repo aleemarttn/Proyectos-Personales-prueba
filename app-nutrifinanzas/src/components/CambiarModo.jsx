@@ -49,7 +49,7 @@ export default function CambiarModo() {
   // --- Ya está en completo: solo ofrecemos volver, y sin insistir ---
   if (completo) {
     return (
-      <div className="px-5 mb-4">
+      <div data-tour="perfil-modo" className="px-5 mb-4">
         <button
           onClick={bajarASimple}
           disabled={guardando}
@@ -73,7 +73,7 @@ export default function CambiarModo() {
 
   // --- Está en simple: invitación a subir, con los objetivos en el sitio ---
   return (
-    <div className="px-5 mb-4">
+    <div data-tour="perfil-modo" className="px-5 mb-4">
       <div className="bg-white rounded-3xl p-5 shadow-card">
         <div className="w-11 h-11 rounded-2xl bg-brand-100 text-brand-600 flex items-center justify-center mb-3">
           <Target size={22} />

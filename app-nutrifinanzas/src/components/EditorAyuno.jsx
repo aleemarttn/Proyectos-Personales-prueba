@@ -58,7 +58,7 @@ export default function EditorAyuno() {
   )
 
   return (
-    <div className="px-5 mb-4">
+    <div data-tour="perfil-ayuno" className="px-5 mb-4">
       <h2 className="font-extrabold text-gray-700 mb-3">Ayuno intermitente</h2>
 
       <div className="bg-white rounded-3xl p-4 shadow-card">

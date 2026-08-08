@@ -7,6 +7,10 @@ import {
   PieChart,
   ChefHat,
   User,
+  Users,
+  Timer,
+  ListTodo,
+  Settings2,
   X,
   ArrowLeft,
   ArrowRight,
@@ -19,7 +23,7 @@ import { funcionesDe } from '../lib/modos.js'
 // secciones clave de la app. Se apoya en atributos `data-tour="..."` que
 // marcan los elementos reales en pantalla, así que si cambian de sitio o de
 // estilo el tour los sigue encontrando sin tocar este archivo.
-const PASOS_BASE = [
+const PASOS_DESPENSA = [
   {
     id: 'intro',
     selector: null,
@@ -87,35 +91,119 @@ const PASOS_BASE = [
   },
 ]
 
+const PASOS_PERFIL = [
+  {
+    id: 'intro-perfil',
+    selector: null,
+    icon: User,
+    color: 'amber',
+    titulo: 'Ajusta la app a tu vida',
+    texto: 'Aquí tienes las opciones para personalizar cómo usas NutriFinanzas.',
+  },
+  {
+    id: 'compartida',
+    selector: '[data-tour="perfil-despensa-compartida"]',
+    icon: Users,
+    color: 'brand',
+    titulo: 'Despensa compartida',
+    texto: 'Crea un hogar o usa un código para compartir alimentos y gastos. El diario sigue siendo privado.',
+  },
+  {
+    id: 'comidas',
+    selector: '[data-tour="perfil-comidas"]',
+    icon: ListTodo,
+    color: 'brand',
+    titulo: 'Tus comidas',
+    texto: 'Puedes renombrar, ordenar o añadir comidas para que el diario se adapte a tu rutina.',
+    requiere: 'diario',
+  },
+  {
+    id: 'ayuno',
+    selector: '[data-tour="perfil-ayuno"]',
+    icon: Timer,
+    color: 'amber',
+    titulo: 'Ayuno intermitente',
+    texto: 'Actívalo si lo practicas, elige tu horario y encontrarás el contador en el Diario.',
+    requiere: 'diario',
+  },
+  {
+    id: 'modo',
+    selector: '[data-tour="perfil-modo"]',
+    icon: Settings2,
+    color: 'brand',
+    titulo: 'Cambia de modo cuando quieras',
+    texto: 'Puedes pasar entre modo sencillo y completo sin perder tu despensa ni tus gastos.',
+  },
+]
+
 const TONOS = {
   amber: 'bg-amber-100 text-amber-600',
   brand: 'bg-brand-100 text-brand-600',
 }
 
-function claveVisto(userId) {
-  return `nutrifinanzas_tour_${userId}`
+const CONFIG_TOUR = {
+  despensa: {
+    pasos: PASOS_DESPENSA,
+    campoPerfil: 'tourBienvenidaVisto',
+    claveLocal: 'nutrifinanzas_tour_despensa_iniciado',
+    marcar: 'marcarTourBienvenidaVisto',
+  },
+  perfil: {
+    pasos: PASOS_PERFIL,
+    campoPerfil: 'tourPerfilVisto',
+    claveLocal: 'nutrifinanzas_tour_perfil_iniciado',
+    marcar: 'marcarTourPerfilVisto',
+  },
 }
 
-export default function TourGuiado({ activo }) {
-  const { sesion, perfil } = useAuth()
+function claveInicio(prefijo, userId) {
+  return `${prefijo}_${userId}`
+}
+
+export default function TourGuiado({ activo, tipo = 'despensa' }) {
+  const auth = useAuth()
+  const { sesion, perfil } = auth
+  const config = CONFIG_TOUR[tipo]
   const [pasoActual, setPasoActual] = useState(0)
   const [enCurso, setEnCurso] = useState(false)
   const [medida, setMedida] = useState(null)
   const wrapperRef = useRef(null)
 
-  const pasos = PASOS_BASE.filter(
+  const pasos = config.pasos.filter(
     (p) => !p.requiere || funcionesDe(perfil?.tipo)[p.requiere]
   )
   const paso = pasos[pasoActual]
 
-  // Decide si hay que arrancar el tour: solo la primera vez que este
-  // usuario llega a la despensa con el perfil ya completo.
+  // Decide si hay que arrancar el tour: solo una vez para una cuenta nueva.
+  // El dato real vive en Supabase; localStorage evita un duplicado durante
+  // el instante en que llega la actualización del perfil.
   useEffect(() => {
     if (!activo || !sesion || !perfil?.tipo) return
-    if (localStorage.getItem(claveVisto(sesion.user.id))) return
+    if (
+      perfil[config.campoPerfil] ||
+      localStorage.getItem(claveInicio(config.claveLocal, sesion.user.id))
+    ) return
+
+    localStorage.setItem(claveInicio(config.claveLocal, sesion.user.id), '1')
     setPasoActual(0)
     setEnCurso(true)
-  }, [activo, sesion, perfil?.tipo])
+    auth[config.marcar]().catch((error) => {
+      // La copia local mantiene la experiencia correcta si falta aplicar la
+      // migración o hay una interrupción puntual de red.
+      console.error('No se pudo marcar el tour como visto:', error)
+    })
+  }, [activo, sesion, perfil?.tipo, perfil?.[config.campoPerfil], config, auth])
+
+  // Las tarjetas de Perfil están una debajo de otra. Al cambiar de paso,
+  // llevamos el objetivo a la vista para que el foco no señale contenido
+  // fuera de pantalla.
+  useEffect(() => {
+    if (!enCurso || !paso?.selector) return
+    const el = document.querySelector(paso.selector)
+    if (!el) return
+    const reducirMovimiento = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    el.scrollIntoView({ block: 'center', behavior: reducirMovimiento ? 'auto' : 'smooth' })
+  }, [enCurso, paso])
 
   // Mientras el tour está en curso, recalcula en cada frame la posición del
   // elemento señalado: cubre resize, scroll y el hecho de que la pantalla
@@ -150,7 +238,6 @@ export default function TourGuiado({ activo }) {
   }, [enCurso, paso])
 
   function terminar() {
-    if (sesion) localStorage.setItem(claveVisto(sesion.user.id), '1')
     setEnCurso(false)
   }
 

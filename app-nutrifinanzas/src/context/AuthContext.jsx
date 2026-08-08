@@ -20,6 +20,8 @@ function filaAPerfil(fila) {
     genero: fila.genero,
     comunidadAutonoma: fila.comunidad_autonoma,
     provincia: fila.provincia,
+    tourBienvenidaVisto: !!fila.tour_bienvenida_visto,
+    tourPerfilVisto: !!fila.tour_perfil_visto,
     // tipo_perfil es null hasta que se completa el onboarding
     tipo: fila.tipo_perfil,
     // Ayuno intermitente (migración 013). Si todavía no se ha aplicado, las
@@ -229,6 +231,36 @@ export function AuthProvider({ children }) {
     setPerfil(filaAPerfil(data))
   }
 
+  // Se llama al abrir el tour, no al terminarlo: si se interrumpe la sesión,
+  // no se vuelve a mostrar en cada acceso posterior.
+  async function marcarTourBienvenidaVisto() {
+    if (!sesion || perfil?.tourBienvenidaVisto) return
+
+    const { data, error } = await supabase
+      .from('perfiles')
+      .update({ tour_bienvenida_visto: true })
+      .eq('id', sesion.user.id)
+      .select()
+      .single()
+
+    if (error) throw error
+    setPerfil(filaAPerfil(data))
+  }
+
+  async function marcarTourPerfilVisto() {
+    if (!sesion || perfil?.tourPerfilVisto) return
+
+    const { data, error } = await supabase
+      .from('perfiles')
+      .update({ tour_perfil_visto: true })
+      .eq('id', sesion.user.id)
+      .select()
+      .single()
+
+    if (error) throw error
+    setPerfil(filaAPerfil(data))
+  }
+
   // Cambia de modo sin tocar nada más. Al pasar a simple NO se borra nada:
   // los macros se quedan en su columna y el diario en su tabla, solo dejan de
   // mostrarse. Volver a completo lo recupera todo tal y como estaba.
@@ -286,6 +318,8 @@ export function AuthProvider({ children }) {
     iniciarSesion,
     cerrarSesion,
     guardarPerfil,
+    marcarTourBienvenidaVisto,
+    marcarTourPerfilVisto,
     cambiarModo,
     guardarAyuno,
     crearHogar,

@@ -65,7 +65,7 @@ export default function EditorComidas() {
   }
 
   return (
-    <div className="px-5 mb-4">
+    <div data-tour="perfil-comidas" className="px-5 mb-4">
       <h2 className="font-extrabold text-gray-700 mb-1">Mis comidas del día</h2>
       <p className="text-sm text-gray-400 font-semibold mb-3">
         Hasta {MAX_COMIDAS}. Puedes renombrarlas y ordenarlas como quieras.

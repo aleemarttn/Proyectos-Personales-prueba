@@ -117,6 +117,7 @@ export default function App() {
       <InstalarApp conBarra={mostrarBarra} />
       {mostrarBarra && <BottomNav />}
       <TourGuiado activo={mostrarBarra && location.pathname === '/despensa'} />
+      <TourGuiado tipo="perfil" activo={mostrarBarra && location.pathname === '/perfil'} />
     </PhoneFrame>
   )
 }

@@ -21,6 +21,12 @@ create table if not exists public.perfiles (
   macros_hidratos integer,
   macros_proteinas integer,
   macros_grasas   integer,
+  -- El tour de bienvenida solo se enseña a una cuenta recién creada. Se
+  -- persiste en el perfil para que no vuelva a aparecer al iniciar sesión
+  -- desde otro dispositivo o tras borrar los datos del navegador.
+  tour_bienvenida_visto boolean not null default false,
+  -- Tutorial específico de las herramientas que viven en Perfil.
+  tour_perfil_visto boolean not null default false,
   -- Ayuno intermitente (migración 013). La ventana se guarda como hora de
   -- inicio + duración; la hora de fin siempre es una resta.
   ayuno_activo    boolean not null default false,

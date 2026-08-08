@@ -21,7 +21,7 @@ export default function DespensaCompartida() {
   const { sesion, hogar, crearHogar, unirseAHogar, salirDelHogar } = useAuth()
 
   return (
-    <div className="px-5 mb-4">
+    <div data-tour="perfil-despensa-compartida" className="px-5 mb-4">
       <h2 className="font-extrabold text-gray-700 mb-3">Despensa compartida</h2>
       <div className="bg-white rounded-3xl p-4 shadow-card">
         {hogar ? (
