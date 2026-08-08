@@ -82,8 +82,13 @@ export default function Perfil() {
           )}
           <Dato
             icon={MapPin}
-            label="Código postal"
-            valor={perfil.codigoPostal || '—'}
+            label="Comunidad autónoma"
+            valor={perfil.comunidadAutonoma || '—'}
+          />
+          <Dato
+            icon={MapPin}
+            label="Provincia"
+            valor={perfil.provincia || '—'}
           />
         </div>
       </div>

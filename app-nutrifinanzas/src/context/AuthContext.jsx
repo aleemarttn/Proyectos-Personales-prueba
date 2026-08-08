@@ -17,7 +17,8 @@ function filaAPerfil(fila) {
     nombre: fila.nombre,
     edad: fila.edad,
     genero: fila.genero,
-    codigoPostal: fila.codigo_postal,
+    comunidadAutonoma: fila.comunidad_autonoma,
+    provincia: fila.provincia,
     // tipo_perfil es null hasta que se completa el onboarding
     tipo: fila.tipo_perfil,
     macros:
@@ -140,7 +141,8 @@ export function AuthProvider({ children }) {
       nombre: datos.nombre,
       edad: datos.edad ? Number(datos.edad) : null,
       genero: datos.genero,
-      codigo_postal: datos.codigoPostal,
+      comunidad_autonoma: datos.comunidadAutonoma,
+      provincia: datos.provincia,
       tipo_perfil: datos.tipo,
       macros_kcal: datos.macros?.kcal ?? null,
       macros_hidratos: datos.macros?.hidratos ?? null,

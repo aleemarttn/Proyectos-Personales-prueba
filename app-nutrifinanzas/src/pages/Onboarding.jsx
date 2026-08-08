@@ -10,11 +10,12 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { SIMPLE, COMPLETO, funcionesDe } from '../lib/modos.js'
+import RegionSelector from '../components/RegionSelector.jsx'
 
 // Lo PRIMERO que se decide al crear la cuenta es para qué se quiere la app.
 // De esa respuesta cuelga todo lo demás, incluido cuántos datos se piden:
 //   Paso 1: elegir modo (simple / completo)
-//   Paso 2: datos — en simple solo nombre y código postal
+//   Paso 2: datos — en simple solo nombre y comunidad/provincia
 //   Paso 3: objetivos de macros (solo completo)
 export default function Onboarding() {
   const navigate = useNavigate()
@@ -32,7 +33,8 @@ export default function Onboarding() {
     nombre: '',
     edad: '',
     genero: 'Mujer',
-    codigoPostal: '',
+    comunidadAutonoma: '',
+    provincia: '',
   })
 
   // Objetivos de macros (solo control total)
@@ -60,7 +62,8 @@ export default function Onboarding() {
         // En modo simple no se piden ni se guardan: no hacen falta para nada.
         edad: funciones.datosPersonales ? datos.edad : '',
         genero: funciones.datosPersonales ? datos.genero : null,
-        codigoPostal: datos.codigoPostal,
+        comunidadAutonoma: datos.comunidadAutonoma,
+        provincia: datos.provincia,
         macros: funciones.macros ? macros : null,
       })
       navigate('/despensa')
@@ -114,7 +117,7 @@ export default function Onboarding() {
                 'En qué te gastas el dinero del súper',
                 'Recetas con lo que tienes en casa',
               ]}
-              nota="Solo te pedimos el nombre y el código postal."
+              nota="Solo te pedimos el nombre y tu comunidad autónoma."
               onClick={() => elegir(SIMPLE)}
             />
 
@@ -143,7 +146,7 @@ export default function Onboarding() {
             <p className="text-gray-500 mb-6">
               {funciones.datosPersonales
                 ? 'La edad y el género nos sirven para afinar tus objetivos.'
-                : 'Con esto basta. El código postal es para los precios de tu zona.'}
+                : 'Con esto basta. La comunidad y provincia son para los precios de tu zona.'}
             </p>
 
             <Campo
@@ -185,11 +188,12 @@ export default function Onboarding() {
               </>
             )}
 
-            <Campo
-              label="Código postal"
-              valor={datos.codigoPostal}
-              onChange={(v) => setDatos({ ...datos, codigoPostal: v })}
-              placeholder="Ej. 28013"
+            <RegionSelector
+              comunidad={datos.comunidadAutonoma}
+              provincia={datos.provincia}
+              onChange={({ comunidad, provincia }) =>
+                setDatos({ ...datos, comunidadAutonoma: comunidad, provincia })
+              }
             />
 
             {error && !funciones.macros && (

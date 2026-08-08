@@ -119,7 +119,7 @@ http://localhost:5173
 3. **Onboarding (alta):** elige entre dos perfiles:
    - **Control total:** datos + objetivos de calorías y macros (ej. 2000 kcal,
      50% hidratos / 30% proteínas / 20% grasas).
-   - **Sencilla:** solo nombre, edad, género y código postal (sin macros).
+   - **Sencilla:** solo nombre, edad, género y comunidad autónoma/provincia (sin macros).
 4. **Despensa:** empieza vacía (cada cuenta tiene la suya). Puedes:
    - **Añadir** un alimento a mano.
    - **Escanear** un ticket (simulado: sale una "cámara", un spinner de ~1,5s
