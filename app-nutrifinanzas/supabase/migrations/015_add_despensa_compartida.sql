@@ -64,9 +64,13 @@ create index if not exists idx_alimentos_hogar on public.alimentos (hogar_id)
 -- Van en SECURITY DEFINER a propósito: una política de `hogar_miembros`
 -- que consultase `hogar_miembros` se llamaría a sí misma sin parar
 -- (infinite recursion detected in policy). Al saltarse RLS por dentro, la
--- función corta el bucle. Por eso mismo llevan el `search_path` fijado y
--- se les quita el permiso a `public`: una función DEFINER con el
--- search_path suelto es un agujero de manual.
+-- función corta el bucle. Por eso mismo llevan el `search_path` fijado:
+-- una función DEFINER con el search_path suelto es un agujero de manual.
+--
+-- Ojo con los permisos: en Supabase NO basta con `revoke ... from public`.
+-- Hay unos DEFAULT PRIVILEGES que le dan EXECUTE a `anon` y `authenticated`
+-- sobre cada función nueva del esquema `public`, y esa concesión es directa,
+-- así que revocarle a `public` no la toca. Hay que nombrarlos.
 -- ------------------------------------------------------------
 
 -- El hogar del usuario que hace la petición, o NULL si no está en ninguno.
@@ -82,7 +86,7 @@ as $$
   select hogar_id from public.hogar_miembros where usuario_id = auth.uid();
 $$;
 
-revoke all on function public.mi_hogar() from public;
+revoke all on function public.mi_hogar() from public, anon;
 grant execute on function public.mi_hogar() to authenticated;
 
 -- Código de invitación de 6 caracteres. El alfabeto no lleva O, I, L, 0 ni 1
@@ -112,7 +116,10 @@ begin
 end;
 $$;
 
-revoke all on function public.generar_codigo_hogar() from public;
+-- Esta no la llama el cliente jamás: solo `crear_hogar` por dentro. Y como
+-- no comprueba la sesión (no le hace falta ahí dentro), se le quita también
+-- a `authenticated`.
+revoke all on function public.generar_codigo_hogar() from public, anon, authenticated;
 
 -- ------------------------------------------------------------
 -- 4) Operaciones sobre el hogar
@@ -159,7 +166,7 @@ begin
 end;
 $$;
 
-revoke all on function public.crear_hogar(text) from public;
+revoke all on function public.crear_hogar(text) from public, anon;
 grant execute on function public.crear_hogar(text) to authenticated;
 
 create or replace function public.unirse_a_hogar(p_codigo text)
@@ -199,7 +206,7 @@ begin
 end;
 $$;
 
-revoke all on function public.unirse_a_hogar(text) from public;
+revoke all on function public.unirse_a_hogar(text) from public, anon;
 grant execute on function public.unirse_a_hogar(text) to authenticated;
 
 create or replace function public.salir_del_hogar()
@@ -253,7 +260,7 @@ begin
 end;
 $$;
 
-revoke all on function public.salir_del_hogar() from public;
+revoke all on function public.salir_del_hogar() from public, anon;
 grant execute on function public.salir_del_hogar() to authenticated;
 
 -- Quién más está en tu hogar. Va por función para NO tener que abrir la
@@ -275,7 +282,7 @@ as $$
    order by m.created_at, m.usuario_id;
 $$;
 
-revoke all on function public.miembros_de_mi_hogar() from public;
+revoke all on function public.miembros_de_mi_hogar() from public, anon;
 grant execute on function public.miembros_de_mi_hogar() to authenticated;
 
 -- ------------------------------------------------------------
