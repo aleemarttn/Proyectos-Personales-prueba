@@ -41,6 +41,23 @@ Deno.serve(async (req) => {
       return jsonError('No autorizado', 401)
     }
 
+    // Límite en base de datos (no solo en el frontend): 5/minuto y
+    // 30/día por usuario. Cuesta varios segundos y gasta cuota de Gemini
+    // compartida por todo el proyecto, así que hay que frenar aquí antes
+    // de gastar nada, no después.
+    const { data: permitido, error: limiteErr } = await supabase.rpc('registrar_peticion_ia', {
+      p_funcion: 'generar-recetas',
+      p_limite_minuto: 5,
+      p_limite_dia: 30,
+    })
+    if (limiteErr) {
+      console.error('Error comprobando el límite de peticiones:', limiteErr)
+      return jsonError('No se pudieron generar recetas.', 500)
+    }
+    if (!permitido) {
+      return jsonError('Has hecho demasiadas peticiones seguidas. Espera un momento e inténtalo de nuevo.', 429)
+    }
+
     if (!GEMINI_API_KEY) {
       return jsonError('El servidor no tiene configurada la clave de Gemini.', 500)
     }
@@ -144,11 +161,15 @@ async function llamarGemini(prompt: string) {
     generationConfig: {
       temperature: 0.3,
       responseMimeType: 'application/json',
-      // Límite de seguridad: sin esto una respuesta larga (varias recetas
-      // con pasos) puede tardar más que el tiempo máximo de ejecución de la
-      // Edge Function y acabar devolviendo un error genérico en vez de un
-      // JSON. Con 2-3 recetas y pasos muy breves, esto sobra de margen.
-      maxOutputTokens: 900,
+      // NO fijar maxOutputTokens aquí (igual que en analizar-imagen). Se
+      // probó con 900 y con 2048: gemini-flash-latest tiene "thinking"
+      // activado por defecto y ese razonamiento interno se descuenta del
+      // MISMO presupuesto que el JSON final, con gasto variable de una
+      // llamada a otra (confirmado con logs: finishReason=MAX_TOKENS y el
+      // JSON cortado a medias, incluso con una despensa pequeña). Intentar
+      // desactivarlo con thinkingConfig.thinkingBudget da 400 Invalid
+      // Argument en este alias del modelo, así que mejor no capar el
+      // límite en vez de perseguir un número que falla de forma intermitente.
     },
   })
 
@@ -189,9 +210,19 @@ async function llamarGemini(prompt: string) {
   }
 
   const texto = datos.candidates?.[0]?.content?.parts?.[0]?.text
-  if (!texto) throw new Error('Gemini no devolvió contenido analizable.')
+  const finishReason = datos.candidates?.[0]?.finishReason
 
-  return normalizarRecetas(extraerJson(texto))
+  // El cliente solo ve un mensaje genérico (ver catch en el handler), pero
+  // esto queda en los logs del servidor: cuando el JSON llega cortado a
+  // medias, finishReason suele ser MAX_TOKENS, y sin este dato no hay forma
+  // de distinguir "el prompt confundió al modelo" de "se quedó sin tokens".
+  if (!texto) throw new Error(`Gemini no devolvió contenido analizable. finishReason=${finishReason}`)
+
+  try {
+    return normalizarRecetas(extraerJson(texto))
+  } catch {
+    throw new Error(`JSON de Gemini ilegible. finishReason=${finishReason} len=${texto.length}`)
+  }
 }
 
 // Por si el modelo envuelve el JSON en ```json ... ``` a pesar de pedirlo limpio

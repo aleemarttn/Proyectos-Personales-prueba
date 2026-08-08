@@ -44,6 +44,24 @@ Deno.serve(async (req) => {
       return jsonError('No autorizado', 401)
     }
 
+    // Límite en base de datos (no solo en el frontend): 15/minuto y
+    // 100/día por usuario. Más generoso que generar-recetas porque un
+    // escaneo normal de la compra puede encadenar varias fotos seguidas
+    // (ticket + varios productos sueltos), pero sigue frenando un script
+    // que machaque el endpoint.
+    const { data: permitido, error: limiteErr } = await supabase.rpc('registrar_peticion_ia', {
+      p_funcion: 'analizar-imagen',
+      p_limite_minuto: 15,
+      p_limite_dia: 100,
+    })
+    if (limiteErr) {
+      console.error('Error comprobando el límite de peticiones:', limiteErr)
+      return jsonError('No se pudo analizar la imagen.', 500)
+    }
+    if (!permitido) {
+      return jsonError('Has hecho demasiadas peticiones seguidas. Espera un momento e inténtalo de nuevo.', 429)
+    }
+
     if (!GEMINI_API_KEY) {
       return jsonError('El servidor no tiene configurada la clave de Gemini.', 500)
     }
