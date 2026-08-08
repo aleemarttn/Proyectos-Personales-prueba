@@ -14,12 +14,14 @@ import {
 import { useApp } from '../context/AppContext.jsx'
 import { useDiario } from '../context/DiarioContext.jsx'
 import { buscarProductosPorNombre } from '../lib/productos.js'
+import { cargarRecientes } from '../lib/recientes.js'
 import { comidaSugeridaPorHora } from '../lib/comidas.js'
 import { esHoy, etiquetaDia, fechaLarga } from '../lib/fechas.js'
 import SelectorUnidad from '../components/SelectorUnidad.jsx'
 import { unidadDe, conUnidad } from '../utils/unidades.js'
 
 const TABS = [
+  { id: 'recientes', label: 'Recientes' },
   { id: 'despensa', label: 'Despensa' },
   { id: 'catalogo', label: 'Catálogo' },
   { id: 'manual', label: 'Manual' },
@@ -49,7 +51,9 @@ export default function RegistrarComida() {
   // necesariamente en hoy (ver DiarioContext).
   const { agregarRegistros, comidas, fecha } = useDiario()
 
-  const [tab, setTab] = useState('despensa')
+  // Se entra por "Recientes" a propósito: casi siempre repites algo que ya
+  // has comido, y así son dos toques en vez de buscar.
+  const [tab, setTab] = useState('recientes')
 
   // A qué comida del día se registra. Si venimos del botón "+ Añadir" de
   // una comida concreta del diario llega en la URL; si no, se propone la
@@ -70,6 +74,28 @@ export default function RegistrarComida() {
   // unidades (ej. "3 rebanadas") en vez de pesar cada vez.
   const [modoCantidad, setModoCantidad] = useState('gramos') // 'gramos' | 'unidades'
   const [unidades, setUnidades] = useState('')
+
+  // Alimentos ya registrados otras veces (los más repetidos primero)
+  const [recientes, setRecientes] = useState([])
+  const [cargandoRecientes, setCargandoRecientes] = useState(true)
+
+  useEffect(() => {
+    let activo = true
+    cargarRecientes()
+      .then((lista) => {
+        if (activo) setRecientes(lista)
+      })
+      .catch((e) => {
+        // Que falle no puede bloquear el registro: quedan las otras pestañas
+        console.error('Error cargando los alimentos recientes:', e)
+      })
+      .finally(() => {
+        if (activo) setCargandoRecientes(false)
+      })
+    return () => {
+      activo = false
+    }
+  }, [])
 
   // Búsqueda en el catálogo compartido
   const [busqueda, setBusqueda] = useState('')
@@ -111,6 +137,21 @@ export default function RegistrarComida() {
     setModoCantidad(item?.pesoUnidadG ? 'unidades' : 'gramos')
   }
 
+  // Un "reciente" se registró en su día desde la despensa, el catálogo o a
+  // mano. Si el alimento sigue en la despensa se usa ese (macros al día y
+  // peso por unidad); si ya no está, vale la copia que guardó el registro.
+  // Además propone la última cantidad que tomaste, que suele ser la misma.
+  function elegirReciente(reciente) {
+    const vivo = reciente.alimentoId
+      ? alimentos.find((a) => a.id === reciente.alimentoId)
+      : null
+
+    setSeleccionado(vivo || reciente)
+    setModoCantidad('gramos')
+    setUnidades('')
+    setCantidadG(reciente.ultimaCantidadG ? String(reciente.ultimaCantidadG) : '')
+  }
+
   async function buscarEnCatalogo() {
     if (!busqueda.trim()) return
     setBuscandoCatalogo(true)
@@ -133,10 +174,22 @@ export default function RegistrarComida() {
         : null
       : aNumero(cantidadG)
   const cantidadValida = cantidadNum != null && cantidadNum > 0
-  const sinKcal = seleccionado && (seleccionado.kcal === null || seleccionado.kcal === undefined)
 
-  const preview =
-    seleccionado && cantidadValida && !sinKcal
+  // Un reciente apuntado a mano sin gramos (un "bocadillo de tortilla", 450
+  // kcal) no tiene valor por 100 g del que tirar, pero sí sus kcal: lo único
+  // que se puede hacer con él es repetirlo igual, sin pedir cantidad.
+  const fijo = !!seleccionado?.sinBase
+  const sinKcal =
+    !fijo && seleccionado && (seleccionado.kcal === null || seleccionado.kcal === undefined)
+
+  const preview = fijo
+    ? {
+        kcal: seleccionado.kcalFijo,
+        proteinas: seleccionado.proteinasFijo,
+        hidratos: seleccionado.hidratosFijo,
+        grasas: seleccionado.grasasFijo,
+      }
+    : seleccionado && cantidadValida && !sinKcal
       ? {
           kcal: (seleccionado.kcal * cantidadNum) / 100,
           proteinas: seleccionado.proteinas != null ? (seleccionado.proteinas * cantidadNum) / 100 : null,
@@ -149,7 +202,8 @@ export default function RegistrarComida() {
   // Unidad del alimento elegido: gramos o mililitros (bebidas).
   const unidad = tab === 'manual' ? manual.unidadMedida : unidadDe(seleccionado)
 
-  const validoOrigen = tab !== 'manual' && !!seleccionado && cantidadValida && !sinKcal
+  const validoOrigen =
+    tab !== 'manual' && !!seleccionado && (fijo || (cantidadValida && !sinKcal))
   const validoManual = tab === 'manual' && manual.nombre.trim() && manual.kcal !== ''
   const valido = validoOrigen || validoManual
 
@@ -168,18 +222,26 @@ export default function RegistrarComida() {
         origen: 'manual',
       }
     }
+    // De dónde viene se deduce del propio alimento, no de la pestaña: un
+    // "reciente" puede ser de la despensa, del catálogo o de algo escrito a
+    // mano, y la columna `origen` solo admite unos valores concretos
+    // (ver migraciones 005/009/010) — 'recientes' la haría fallar.
+    const deDespensa = !!seleccionado.id && alimentos.some((a) => a.id === seleccionado.id)
+    const origen = deDespensa ? 'despensa' : seleccionado.codigoBarras ? 'catalogo' : 'manual'
+
     return {
       clave: `${Date.now()}-${Math.random()}`,
       nombre: seleccionado.nombre,
-      cantidadG: cantidadNum,
+      // Sin base por 100 g no hay cantidad que guardar, solo el total
+      cantidadG: fijo ? 0 : cantidadNum,
       unidadMedida: unidadDe(seleccionado),
       kcal: preview.kcal,
       proteinas: preview.proteinas,
       hidratos: preview.hidratos,
       grasas: preview.grasas,
-      alimentoId: tab === 'despensa' ? seleccionado.id : null,
-      codigoBarras: tab === 'catalogo' ? seleccionado.codigoBarras : null,
-      origen: tab,
+      alimentoId: deDespensa ? seleccionado.id : null,
+      codigoBarras: seleccionado.codigoBarras || null,
+      origen,
     }
   }
 
@@ -296,13 +358,15 @@ export default function RegistrarComida() {
         </div>
       )}
 
-      {/* Pestañas de origen */}
-      <div className="px-5 mt-4 flex gap-2">
+      {/* Pestañas de origen. Son cuatro y "Recientes" es la palabra más
+          larga, así que el texto va algo más pequeño para que quepan en un
+          móvil estrecho sin partirse en dos líneas. */}
+      <div className="px-5 mt-4 flex gap-1.5">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => cambiarTab(t.id)}
-            className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition ${
+            className={`flex-1 px-1 py-2.5 rounded-xl font-bold text-[13px] transition ${
               tab === t.id ? 'bg-brand-500 text-white shadow-soft' : 'bg-white text-gray-500 shadow-card'
             }`}
           >
@@ -312,6 +376,49 @@ export default function RegistrarComida() {
       </div>
 
       <div className="px-5 py-4 space-y-3">
+        {tab === 'recientes' && (
+          <div className="space-y-2 max-h-64 overflow-y-auto no-scrollbar">
+            {cargandoRecientes && (
+              <div className="flex justify-center py-6">
+                <Loader2 className="animate-spin text-brand-400" size={24} />
+              </div>
+            )}
+
+            {!cargandoRecientes && recientes.length === 0 && (
+              <div className="text-center py-6 px-4">
+                <p className="text-gray-400 text-sm font-semibold">
+                  Aquí irán apareciendo los alimentos que registres, para que
+                  repetirlos sea cosa de dos toques.
+                </p>
+                <button
+                  onClick={() => cambiarTab('despensa')}
+                  className="mt-3 text-brand-600 font-bold text-sm"
+                >
+                  Elegir de mi despensa
+                </button>
+              </div>
+            )}
+
+            {recientes.map((r) => (
+              <OpcionAlimento
+                key={r.clave}
+                item={r}
+                seleccionado={seleccionado?.nombre === r.nombre}
+                onClick={() => elegirReciente(r)}
+                detalle={
+                  r.veces > 1
+                    ? `${r.veces} veces · ${
+                        r.sinBase
+                          ? `${Math.round(r.kcalFijo)} kcal`
+                          : `${Math.round(r.kcal)} kcal /100 ${unidadDe(r)}`
+                      }`
+                    : undefined
+                }
+              />
+            ))}
+          </div>
+        )}
+
         {tab === 'despensa' && (
           <div className="space-y-2 max-h-64 overflow-y-auto no-scrollbar">
             {alimentos.length === 0 && (
@@ -359,9 +466,24 @@ export default function RegistrarComida() {
           </>
         )}
 
-        {(tab === 'despensa' || tab === 'catalogo') && seleccionado && (
+        {tab !== 'manual' && seleccionado && (
           <div className="bg-white rounded-2xl p-4 shadow-card space-y-3">
-            {sinKcal ? (
+            {fijo ? (
+              // Se apuntó a mano y sin gramos, así que no hay nada que
+              // recalcular: se repite exactamente igual.
+              <div className="flex items-center gap-2 bg-brand-50 text-brand-700 font-bold rounded-xl px-4 py-3 text-sm">
+                <Flame size={16} className="shrink-0" />
+                <span>
+                  Se repetirá igual: {Math.round(seleccionado.kcalFijo)} kcal
+                  {seleccionado.proteinasFijo != null &&
+                    ` · P ${Math.round(seleccionado.proteinasFijo)}g`}
+                  {seleccionado.hidratosFijo != null &&
+                    ` · H ${Math.round(seleccionado.hidratosFijo)}g`}
+                  {seleccionado.grasasFijo != null &&
+                    ` · G ${Math.round(seleccionado.grasasFijo)}g`}
+                </span>
+              </div>
+            ) : sinKcal ? (
               <p className="bg-amber-50 text-amber-700 text-sm font-semibold rounded-xl px-4 py-3 flex items-center gap-2">
                 <AlertTriangle size={16} className="shrink-0" />
                 Este alimento no tiene kcal registradas. Complétalas antes de registrar el consumo.
@@ -564,7 +686,7 @@ export default function RegistrarComida() {
   )
 }
 
-function OpcionAlimento({ item, seleccionado, onClick }) {
+function OpcionAlimento({ item, seleccionado, onClick, detalle }) {
   return (
     <button
       onClick={onClick}
@@ -575,9 +697,10 @@ function OpcionAlimento({ item, seleccionado, onClick }) {
       <div className="min-w-0">
         <p className="font-bold text-gray-800 truncate">{item.nombre}</p>
         <p className="text-xs text-gray-400 font-semibold">
-          {item.kcal != null
-            ? `${item.kcal} kcal /100 ${unidadDe(item)}`
-            : 'Sin kcal registradas'}
+          {detalle ??
+            (item.kcal != null
+              ? `${Math.round(item.kcal)} kcal /100 ${unidadDe(item)}`
+              : 'Sin kcal registradas')}
         </p>
       </div>
       {seleccionado && <Check size={18} className="text-brand-500 shrink-0" />}
