@@ -1,6 +1,11 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from './AuthContext.jsx'
+import {
+  COLUMNAS_NUTRIENTES,
+  nutrientesAFila,
+  nutrientesDeFila,
+} from '../lib/nutrientes.js'
 
 // Este contexto guarda los ALIMENTOS de la despensa, ahora contra la tabla
 // `alimentos` de Supabase (antes vivían en localStorage). Cada usuario solo
@@ -31,6 +36,9 @@ function filaAAlimento(fila) {
     unidadNombre: fila.unidad_nombre,
     // 'g' o 'ml' (migración 008); los alimentos anteriores son gramos
     unidadMedida: fila.unidad_medida || 'g',
+    // Saturadas, azúcares, sal y fibra (migración 014). A null en todo lo
+    // que se dio de alta antes: sin ellos no hay avisos, pero nada rompe.
+    ...nutrientesDeFila(fila),
   }
 }
 
@@ -93,6 +101,7 @@ export function AppProvider({ children }) {
       peso_unidad_g: alimento.pesoUnidadG ?? null,
       unidad_nombre: alimento.unidadNombre || null,
       unidad_medida: alimento.unidadMedida === 'ml' ? 'ml' : 'g',
+      ...nutrientesAFila(alimento),
     }
 
     const { data, error: err } = await supabase
@@ -112,7 +121,7 @@ export function AppProvider({ children }) {
   // `cambios` usa las claves de las pantallas (kcal, proteinas, hidratos, grasas…).
   async function actualizarAlimento(id, cambios) {
     // Solo mandamos a la BD las columnas que de verdad vienen en `cambios`
-    const columnas = ['kcal', 'proteinas', 'hidratos', 'grasas', 'nombre', 'marca', 'cantidad', 'precio', 'supermercado', 'categoria', 'peso_unidad_g', 'unidad_nombre', 'unidad_medida']
+    const columnas = ['kcal', 'proteinas', 'hidratos', 'grasas', 'nombre', 'marca', 'cantidad', 'precio', 'supermercado', 'categoria', 'peso_unidad_g', 'unidad_nombre', 'unidad_medida', ...COLUMNAS_NUTRIENTES]
     const fila = {}
     for (const c of columnas) {
       if (c in cambios) fila[c] = cambios[c]

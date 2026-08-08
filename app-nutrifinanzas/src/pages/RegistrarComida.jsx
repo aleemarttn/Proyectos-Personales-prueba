@@ -8,6 +8,7 @@ import {
   Search,
   Flame,
   AlertTriangle,
+  Leaf,
   Plus,
   Trash2,
 } from 'lucide-react'
@@ -15,6 +16,8 @@ import { useApp } from '../context/AppContext.jsx'
 import { useDiario } from '../context/DiarioContext.jsx'
 import { buscarProductosPorNombre } from '../lib/productos.js'
 import { cargarRecientes } from '../lib/recientes.js'
+import { avisosDe } from '../lib/avisos.js'
+import { nutrientesPorCantidad } from '../lib/nutrientes.js'
 import { comidaSugeridaPorHora } from '../lib/comidas.js'
 import { esHoy, etiquetaDia, fechaLarga } from '../lib/fechas.js'
 import SelectorUnidad from '../components/SelectorUnidad.jsx'
@@ -198,6 +201,11 @@ export default function RegistrarComida() {
         }
       : null
 
+  // Lo que se puede decir con certeza de este alimento (saturadas, azúcares,
+  // sal, fibra, proteínas). Sale de reglas, no de IA, así que es instantáneo
+  // y no gasta cuota. Si el alimento no tiene esos datos, no dice nada.
+  const avisos = avisosDe(seleccionado)
+
   const comidaElegida = comidas.find((c) => c.id === comidaId) || null
   // Unidad del alimento elegido: gramos o mililitros (bebidas).
   const unidad = tab === 'manual' ? manual.unidadMedida : unidadDe(seleccionado)
@@ -232,6 +240,10 @@ export default function RegistrarComida() {
     return {
       clave: `${Date.now()}-${Math.random()}`,
       nombre: seleccionado.nombre,
+      // Saturadas, azúcares, sal y fibra CONSUMIDOS, escalados igual que las
+      // kcal. Un "fijo" (repetir tal cual) no tiene base por 100 g de la que
+      // escalar, así que va sin ellos.
+      ...(fijo ? {} : nutrientesPorCantidad(seleccionado, cantidadNum)),
       // Sin base por 100 g no hay cantidad que guardar, solo el total
       cantidadG: fijo ? 0 : cantidadNum,
       unidadMedida: unidadDe(seleccionado),
@@ -541,6 +553,12 @@ export default function RegistrarComida() {
                 )}
               </>
             )}
+
+            {/* Lo que se puede afirmar de este alimento. Va después de los
+                macros porque es contexto, no la acción principal. */}
+            {avisos.map((aviso) => (
+              <Aviso key={aviso.id} aviso={aviso} />
+            ))}
           </div>
         )}
 
@@ -682,6 +700,23 @@ export default function RegistrarComida() {
           )}
         </button>
       </div>
+    </div>
+  )
+}
+
+// Un aviso sobre el alimento elegido. Informativo, nunca bloquea el
+// registro: la app no está para decirte lo que puedes comer.
+function Aviso({ aviso }) {
+  const alerta = aviso.tipo === 'alerta'
+  const Icono = alerta ? AlertTriangle : Leaf
+  return (
+    <div
+      className={`flex items-start gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold ${
+        alerta ? 'bg-amber-50 text-amber-700' : 'bg-brand-50 text-brand-700'
+      }`}
+    >
+      <Icono size={16} className="shrink-0 mt-0.5" />
+      <span>{aviso.texto}</span>
     </div>
   )
 }

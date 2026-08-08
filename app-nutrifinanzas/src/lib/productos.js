@@ -1,4 +1,5 @@
 import { supabase } from './supabase.js'
+import { nutrientesAFila, nutrientesDeFila } from './nutrientes.js'
 
 // Catálogo compartido de productos (tabla `productos`, indexada por
 // código de barras). Cualquier usuario puede leerlo y contribuir a él:
@@ -29,6 +30,7 @@ export async function buscarProductoPorCodigoBarras(codigoBarras) {
     pesoUnidadG: data.peso_unidad_g === null ? null : Number(data.peso_unidad_g),
     unidadNombre: data.unidad_nombre,
     unidadMedida: data.unidad_medida || 'g',
+    ...nutrientesDeFila(data),
   }
 }
 
@@ -56,6 +58,7 @@ export async function buscarProductosPorNombre(texto) {
     pesoUnidadG: d.peso_unidad_g === null ? null : Number(d.peso_unidad_g),
     unidadNombre: d.unidad_nombre,
     unidadMedida: d.unidad_medida || 'g',
+    ...nutrientesDeFila(d),
   }))
 }
 
@@ -79,6 +82,7 @@ export async function guardarProductoEnCatalogo(producto) {
         peso_unidad_g: producto.pesoUnidadG ?? null,
         unidad_nombre: producto.unidadNombre || null,
         unidad_medida: producto.unidadMedida === 'ml' ? 'ml' : 'g',
+        ...nutrientesAFila(producto),
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'codigo_barras' }

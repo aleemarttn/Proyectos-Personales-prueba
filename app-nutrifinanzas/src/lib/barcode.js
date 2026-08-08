@@ -8,6 +8,8 @@
 
 import { adivinarUnidad } from '../utils/unidades.js'
 
+// `nutriments` ya trae dentro las saturadas, los azúcares, la sal y la
+// fibra: no hay que pedir campos extra, solo dejar de tirarlos (migración 014).
 const CAMPOS = 'product_name,generic_name,brands,nutriments,categories_tags,quantity,status'
 
 const REGLAS_CATEGORIA = [
@@ -84,6 +86,15 @@ export async function consultarOpenFoodFacts(codigo) {
     proteinas: numeroValido(nutrientes.proteins_100g),
     hidratos: numeroValido(nutrientes.carbohydrates_100g),
     grasas: numeroValido(nutrientes.fat_100g),
+    // Los cuatro que hacen falta para poder avisar de algo (ver lib/avisos.js).
+    // Muchos productos no los tienen rellenos en Open Food Facts: se quedan
+    // a null y ese alimento simplemente no dará avisos.
+    grasasSaturadas: numeroValido(nutrientes['saturated-fat_100g']),
+    azucares: numeroValido(nutrientes.sugars_100g),
+    // OFF da la sal en gramos y, aparte, el sodio; se usa la sal porque es
+    // lo que aparece en las etiquetas europeas.
+    sal: numeroValido(nutrientes.salt_100g),
+    fibra: numeroValido(nutrientes.fiber_100g),
     categoria: adivinarCategoria(producto.categories_tags),
   }
 }

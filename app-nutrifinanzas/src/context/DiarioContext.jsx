@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from './AuthContext.jsx'
 import { hoyISO, semanaDe, sumarDias } from '../lib/fechas.js'
+import { nutrientesAFila, nutrientesDeFila } from '../lib/nutrientes.js'
 
 // Este contexto guarda el DIARIO de consumo (tabla `registros_diarios`,
 // lo que te has comido), las COMIDAS del día del usuario (tabla
@@ -33,6 +34,8 @@ function filaARegistro(fila) {
     comidaId: fila.comida_id,
     fecha: fila.fecha,
     creadoEn: fila.created_at,
+    // Saturadas, azúcares, sal y fibra CONSUMIDOS (migración 014)
+    ...nutrientesDeFila(fila),
   }
 }
 
@@ -218,6 +221,7 @@ export function DiarioProvider({ children }) {
       // anterior. Además es lo que permite registrar en un día pasado.
       fecha: registro.fecha || fecha,
       origen,
+      ...nutrientesAFila(registro),
     }
   }
 

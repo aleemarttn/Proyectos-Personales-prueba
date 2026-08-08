@@ -36,7 +36,7 @@ export async function cargarRecientes() {
   const { data, error } = await supabase
     .from('registros_diarios')
     .select(
-      'nombre, cantidad_g, unidad_medida, kcal, proteinas, hidratos, grasas, alimento_id, codigo_barras, fecha, created_at'
+      'nombre, cantidad_g, unidad_medida, kcal, proteinas, hidratos, grasas, grasas_saturadas, azucares, sal, fibra, alimento_id, codigo_barras, fecha, created_at'
     )
     .gte('fecha', sumarDias(hoyISO(), -DIAS_ATRAS))
     .order('created_at', { ascending: false })
@@ -76,6 +76,12 @@ export async function cargarRecientes() {
       proteinas: conBase ? por100(fila.proteinas, cantidadG) : null,
       hidratos: conBase ? por100(fila.hidratos, cantidadG) : null,
       grasas: conBase ? por100(fila.grasas, cantidadG) : null,
+      // Los cuatro de la migración 014, para que un reciente también pueda
+      // dar avisos (ver lib/avisos.js)
+      grasasSaturadas: conBase ? por100(fila.grasas_saturadas, cantidadG) : null,
+      azucares: conBase ? por100(fila.azucares, cantidadG) : null,
+      sal: conBase ? por100(fila.sal, cantidadG) : null,
+      fibra: conBase ? por100(fila.fibra, cantidadG) : null,
       // ...y sin ella (un "bocadillo de tortilla" apuntado a mano, sin
       // gramos) solo se puede repetir tal cual.
       sinBase: !conBase,

@@ -8,6 +8,7 @@ import SupermercadoSelector from '../components/SupermercadoSelector.jsx'
 import { guardarProductoEnCatalogo } from '../lib/productos.js'
 import SelectorUnidad from '../components/SelectorUnidad.jsx'
 import { adivinarUnidad } from '../utils/unidades.js'
+import { nutrientesDe } from '../lib/nutrientes.js'
 
 // Convierte '' -> null y texto -> número (para peso por unidad)
 function aNumero(v) {
@@ -49,6 +50,9 @@ export default function ConfirmarEscaneo() {
       proteinas: it.proteinas ?? null,
       hidratos: it.hidratos ?? null,
       grasas: it.grasas ?? null,
+      // Saturadas, azúcares, sal y fibra (migración 014): son los que
+      // permiten avisar de algo, así que hay que arrastrarlos hasta el alta.
+      ...nutrientesDe(it),
       codigoBarras: it.codigoBarras || null,
       encontradoEnCatalogo: !!it.encontradoEnCatalogo,
       pesoUnidadG: it.pesoUnidadG ?? null,
@@ -99,6 +103,12 @@ export default function ConfirmarEscaneo() {
               proteinas: nutricion.proteinas ?? it.proteinas,
               hidratos: nutricion.hidratos ?? it.hidratos,
               grasas: nutricion.grasas ?? it.grasas,
+              // La IA que lee la etiqueta ya devolvía azúcares y sal, pero
+              // se tiraban. Saturadas y fibra todavía no las lee (haría
+              // falta redesplegar la Edge Function), así que se conservan
+              // las que hubiera del código de barras.
+              azucares: nutricion.azucares ?? it.azucares,
+              sal: nutricion.sal ?? it.sal,
             }
           : it
       )
@@ -122,6 +132,7 @@ export default function ConfirmarEscaneo() {
             proteinas: it.proteinas,
             hidratos: it.hidratos,
             grasas: it.grasas,
+            ...nutrientesDe(it),
             precio: it.precio === '' ? 0 : Number(it.precio),
             supermercado,
             categoria: it.categoria,
@@ -145,6 +156,7 @@ export default function ConfirmarEscaneo() {
             proteinas: it.proteinas,
             hidratos: it.hidratos,
             grasas: it.grasas,
+            ...nutrientesDe(it),
             categoria: it.categoria,
             pesoUnidadG: it.pesoUnidadG,
             unidadNombre: it.unidadNombre.trim() || null,
