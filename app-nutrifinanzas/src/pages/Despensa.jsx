@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, ScanLine, UtensilsCrossed, Trash2, Flame, Loader2, ChevronRight } from 'lucide-react'
+import { Plus, ScanLine, UtensilsCrossed, Trash2, Flame, Loader2, ChevronRight, Users } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { colorCategoria } from '../data/categorias.js'
@@ -11,12 +11,26 @@ import DetalleAlimento from '../components/DetalleAlimento.jsx'
 // Pantalla principal: la despensa con todos los alimentos.
 export default function Despensa() {
   const navigate = useNavigate()
-  const { alimentos, cargando, error, eliminarAlimento } = useApp()
-  const { perfil } = useAuth()
+  const { alimentos, cargando, error, eliminarAlimento, recargar } = useApp()
+  const { perfil, hogar, sesion } = useAuth()
 
   // id del alimento cuya ficha está abierta (o null)
   const [detalleId, setDetalleId] = useState(null)
   const alimentoDetalle = alimentos.find((a) => a.id === detalleId) || null
+
+  const miId = sesion?.user?.id
+
+  // En una despensa compartida lo que hay en pantalla se queda viejo en
+  // cuanto la otra persona toca algo desde su móvil. Al abrir la despensa se
+  // vuelve a pedir. Sin hogar no hace falta: nadie más puede cambiarla.
+  useEffect(() => {
+    if (hogar) recargar()
+  }, [hogar, recargar])
+
+  // Quién es quién, para poder decir "lo añadió Marta"
+  const nombrePorId = new Map(
+    (hogar?.miembros || []).map((m) => [m.usuarioId, m.nombre || m.email])
+  )
 
   async function eliminar(id) {
     try {
@@ -31,7 +45,16 @@ export default function Despensa() {
       {/* Cabecera */}
       <div className="px-5 pt-[calc(env(safe-area-inset-top)+1.75rem)] pb-4">
         <p className="text-gray-400 font-semibold">Hola, {perfil?.nombre} 👋</p>
-        <h1 className="text-2xl font-black text-gray-800">Tu despensa</h1>
+        <h1 className="text-2xl font-black text-gray-800">
+          {hogar ? hogar.nombre : 'Tu despensa'}
+        </h1>
+        {hogar && (
+          <p className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-700 bg-brand-50 px-2.5 py-1 rounded-full mt-1.5">
+            <Users size={12} /> Despensa compartida ·{' '}
+            {hogar.miembros.length}{' '}
+            {hogar.miembros.length === 1 ? 'persona' : 'personas'}
+          </p>
+        )}
       </div>
 
       {/* Botones de acción */}
@@ -134,6 +157,18 @@ export default function Despensa() {
                   </>
                 )}
               </div>
+              {/* Solo cuando hay hogar: quién lo compró, o el aviso de que
+                  eso todavía no lo ve nadie más. */}
+              {hogar && a.usuarioId !== miId && (
+                <span className="inline-block text-[10px] font-bold text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded-md mt-1">
+                  Lo añadió {nombrePorId.get(a.usuarioId) || 'otra persona'}
+                </span>
+              )}
+              {hogar && a.usuarioId === miId && !a.hogarId && (
+                <span className="inline-block text-[10px] font-bold text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded-md mt-1">
+                  Solo tú lo ves
+                </span>
+              )}
               {tieneMacros(a) && (
                 <div className="flex items-center gap-1.5 mt-1">
                   {a.proteinas != null && <Macro label="P" valor={a.proteinas} color="#ef4444" />}

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
+import * as hogares from '../lib/hogar.js'
 
 // Este contexto gestiona la AUTENTICACIÓN (sesión de Supabase) y el PERFIL
 // del usuario (tabla `perfiles`). Sustituye al perfil que antes vivía en
@@ -60,6 +61,8 @@ export function traducirErrorAuth(error) {
 export function AuthProvider({ children }) {
   const [sesion, setSesion] = useState(null)
   const [perfil, setPerfil] = useState(null)
+  // Hogar (despensa compartida) o null si el usuario no está en ninguno
+  const [hogar, setHogar] = useState(null)
   // `cargando` cubre la comprobación inicial de sesión (evita parpadeos de redirección)
   const [cargando, setCargando] = useState(true)
 
@@ -108,6 +111,32 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
+  // Hogar del usuario. Va en su propio efecto y no dentro de `cargarPerfil`
+  // porque no vive en la tabla `perfiles`, y sobre todo porque si la
+  // migración 015 no está aplicada esto falla: que no se lleve por delante
+  // la carga del perfil, que sí funciona.
+  useEffect(() => {
+    if (!sesion) {
+      setHogar(null)
+      return
+    }
+
+    let activo = true
+    hogares
+      .cargarHogar()
+      .then((h) => {
+        if (activo) setHogar(h)
+      })
+      .catch((e) => {
+        console.error('Error cargando el hogar:', e)
+        if (activo) setHogar(null)
+      })
+
+    return () => {
+      activo = false
+    }
+  }, [sesion])
+
   // --- Acciones de autenticación ---
 
   // Registro. Con "Confirm email" desactivado, deja la sesión activa al momento.
@@ -136,6 +165,37 @@ export function AuthProvider({ children }) {
     await supabase.auth.signOut()
     setSesion(null)
     setPerfil(null)
+    setHogar(null)
+  }
+
+  // --- Hogar (despensa compartida) ---
+  //
+  // Las tres acciones devuelven el hogar resultante ya en el estado. Detrás
+  // hay una función de Postgres que hace el trabajo en una sola transacción,
+  // así que aquí no hay pasos a medias que deshacer.
+
+  async function crearHogar(nombre) {
+    const h = await hogares.crearHogar(nombre)
+    // La función devuelve el hogar recién creado sin sus miembros; se
+    // recargan para tener el nombre y el email de quien lo ha creado.
+    setHogar(await hogares.cargarHogar())
+    return h
+  }
+
+  async function unirseAHogar(codigo) {
+    const h = await hogares.unirseAHogar(codigo)
+    setHogar(await hogares.cargarHogar())
+    return h
+  }
+
+  async function salirDelHogar() {
+    await hogares.salirDelHogar()
+    setHogar(null)
+  }
+
+  // Para cuando la otra persona se une o se va y quieres verlo reflejado
+  async function refrescarHogar() {
+    setHogar(await hogares.cargarHogar())
   }
 
   // --- Perfil ---
@@ -220,6 +280,7 @@ export function AuthProvider({ children }) {
   const value = {
     sesion,
     perfil,
+    hogar,
     cargando,
     registrar,
     iniciarSesion,
@@ -227,6 +288,10 @@ export function AuthProvider({ children }) {
     guardarPerfil,
     cambiarModo,
     guardarAyuno,
+    crearHogar,
+    unirseAHogar,
+    salirDelHogar,
+    refrescarHogar,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { funcionesDe, nombreModo, esCompleto } from '../lib/modos.js'
+import DespensaCompartida from '../components/DespensaCompartida.jsx'
 import EditorComidas from '../components/EditorComidas.jsx'
 import EditorAyuno from '../components/EditorAyuno.jsx'
 import CambiarModo from '../components/CambiarModo.jsx'
@@ -93,6 +94,10 @@ export default function Perfil() {
           />
         </div>
       </div>
+
+      {/* Despensa compartida. Va en los dos modos: la despensa y los gastos
+          existen tanto en el completo como en el sencillo. */}
+      <DespensaCompartida />
 
       {/* Comidas del día (editables, máximo 7). Solo tienen sentido con diario. */}
       {funciones.diario && <EditorComidas />}

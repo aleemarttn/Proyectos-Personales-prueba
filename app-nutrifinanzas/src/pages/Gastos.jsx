@@ -10,6 +10,7 @@ import {
 } from 'recharts'
 import { Wallet, TrendingUp } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
 import { colorCategoria } from '../data/categorias.js'
 import { euros, fechaCorta } from '../utils/formato.js'
 
@@ -17,8 +18,13 @@ import { euros, fechaCorta } from '../utils/formato.js'
 // lista de últimas compras. Todo se calcula a partir de los alimentos.
 export default function Gastos() {
   const { alimentos } = useApp()
+  const { hogar, sesion } = useAuth()
 
   const total = alimentos.reduce((s, a) => s + a.precio, 0)
+
+  // Con despensa compartida el total es el de la casa, así que lo primero
+  // que uno quiere saber es quién ha puesto cuánto.
+  const porPersona = hogar ? gastoPorPersona(alimentos, hogar, sesion?.user?.id) : []
 
   // Agrupamos gasto por categoría (para el donut)
   const porCategoria = agrupar(alimentos, 'categoria')
@@ -33,8 +39,12 @@ export default function Gastos() {
   return (
     <div className="bg-cream min-h-full animate-fade-in pb-6">
       <div className="px-5 pt-[calc(env(safe-area-inset-top)+1.75rem)] pb-4">
-        <h1 className="text-2xl font-black text-gray-800">Tus gastos</h1>
-        <p className="text-gray-400 font-semibold">Resumen de tu compra</p>
+        <h1 className="text-2xl font-black text-gray-800">
+          {hogar ? 'Vuestros gastos' : 'Tus gastos'}
+        </h1>
+        <p className="text-gray-400 font-semibold">
+          {hogar ? `Resumen de la compra de ${hogar.nombre}` : 'Resumen de tu compra'}
+        </p>
       </div>
 
       {/* Tarjeta de gasto total */}
@@ -50,6 +60,35 @@ export default function Gastos() {
           </div>
         </div>
       </div>
+
+      {/* Quién ha puesto qué. Solo con hogar: a solas siempre sería el 100 %. */}
+      {porPersona.length > 0 && (
+        <Seccion titulo="Quién ha puesto qué">
+          <div className="space-y-3">
+            {porPersona.map((p) => (
+              <div key={p.id}>
+                <div className="flex items-center justify-between text-sm mb-1">
+                  <span className="font-semibold text-gray-600 truncate">
+                    {p.nombre}
+                    {p.esMio && (
+                      <span className="text-gray-400 font-semibold"> · tú</span>
+                    )}
+                  </span>
+                  <span className="font-extrabold text-gray-800 shrink-0 ml-2">
+                    {euros(p.valor)}
+                  </span>
+                </div>
+                <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-brand-500"
+                    style={{ width: `${p.porcentaje}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Seccion>
+      )}
 
       {/* Donut: gasto por categoría */}
       <Seccion titulo="Gasto por categoría">
@@ -160,6 +199,31 @@ export default function Gastos() {
       </Seccion>
     </div>
   )
+}
+
+// Cuánto ha puesto cada miembro del hogar. `usuario_id` no cambió de
+// significado al compartir la despensa: sigue siendo quien compró el
+// alimento, así que sirve tal cual para repartir el gasto.
+function gastoPorPersona(lista, hogar, miId) {
+  const suma = {}
+  for (const item of lista) {
+    suma[item.usuarioId] = (suma[item.usuarioId] || 0) + item.precio
+  }
+
+  const total = Object.values(suma).reduce((s, v) => s + v, 0)
+
+  return hogar.miembros
+    .map((m) => {
+      const valor = suma[m.usuarioId] || 0
+      return {
+        id: m.usuarioId,
+        nombre: m.nombre || m.email,
+        esMio: m.usuarioId === miId,
+        valor: Number(valor.toFixed(2)),
+        porcentaje: total > 0 ? (valor / total) * 100 : 0,
+      }
+    })
+    .sort((a, b) => b.valor - a.valor)
 }
 
 // Agrupa una lista sumando los precios por un campo dado

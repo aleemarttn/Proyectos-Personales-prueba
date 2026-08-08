@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from './AuthContext.jsx'
 import {
@@ -8,8 +8,12 @@ import {
 } from '../lib/nutrientes.js'
 
 // Este contexto guarda los ALIMENTOS de la despensa, ahora contra la tabla
-// `alimentos` de Supabase (antes vivían en localStorage). Cada usuario solo
-// ve los suyos (protegido por RLS con auth.uid() = usuario_id).
+// `alimentos` de Supabase (antes vivían en localStorage).
+//
+// Qué se ve: los alimentos propios, más los del hogar si el usuario está en
+// uno (migración 015). No hace falta filtrar aquí, lo hace RLS en la base de
+// datos; este contexto solo se ocupa de recargar cuando el hogar cambia y de
+// marcar los alimentos nuevos como del hogar.
 
 const AppContext = createContext(null)
 
@@ -18,6 +22,11 @@ const AppContext = createContext(null)
 function filaAAlimento(fila) {
   return {
     id: fila.id,
+    // Quién lo compró. Con despensa compartida ya no es siempre "yo", y es
+    // lo que permite decir de quién es cada gasto.
+    usuarioId: fila.usuario_id,
+    // Hogar al que pertenece, o null si es privado (migración 015)
+    hogarId: fila.hogar_id ?? null,
     nombre: fila.nombre,
     marca: fila.marca,
     cantidad: fila.cantidad,
@@ -42,13 +51,30 @@ function filaAAlimento(fila) {
   }
 }
 
+// Lectura de la despensa. Está fuera del componente para poder usarla tanto
+// en la carga inicial como al recargar, sin liarse con las dependencias del
+// efecto.
+async function leerAlimentos() {
+  const { data, error } = await supabase
+    .from('alimentos')
+    .select('*')
+    .order('fecha', { ascending: false })
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return data.map(filaAAlimento)
+}
+
 export function AppProvider({ children }) {
-  const { sesion } = useAuth()
+  const { sesion, hogar } = useAuth()
   const [alimentos, setAlimentos] = useState([])
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState('')
 
-  // Carga los alimentos del usuario cuando hay sesión; los vacía al cerrarla.
+  const hogarId = hogar?.id ?? null
+
+  // Carga los alimentos cuando hay sesión; los vacía al cerrarla. Se repite
+  // al entrar o salir de un hogar, porque lo que se puede ver cambia.
   useEffect(() => {
     if (!sesion) {
       setAlimentos([])
@@ -59,24 +85,39 @@ export function AppProvider({ children }) {
     setCargando(true)
     setError('')
 
-    supabase
-      .from('alimentos')
-      .select('*')
-      .order('fecha', { ascending: false })
-      .order('created_at', { ascending: false })
-      .then(({ data, error: err }) => {
+    leerAlimentos()
+      .then((lista) => {
         if (!activo) return
-        if (err) {
-          console.error('Error cargando alimentos:', err)
-          setError('No se pudo cargar tu despensa.')
-        } else {
-          setAlimentos(data.map(filaAAlimento))
-        }
-        setCargando(false)
+        setAlimentos(lista)
+      })
+      .catch((err) => {
+        if (!activo) return
+        console.error('Error cargando alimentos:', err)
+        setError('No se pudo cargar tu despensa.')
+      })
+      .finally(() => {
+        if (activo) setCargando(false)
       })
 
     return () => {
       activo = false
+    }
+  }, [sesion, hogarId])
+
+  // Volver a leer la despensa. En una despensa compartida hace falta: si tu
+  // pareja añade algo desde su móvil, aquí no se entera nadie hasta que se
+  // pregunta otra vez.
+  //
+  // Va en useCallback para que la referencia no cambie en cada render: las
+  // pantallas la usan como dependencia de un efecto, y sin esto recargarían
+  // en bucle.
+  const recargar = useCallback(async () => {
+    if (!sesion) return
+    try {
+      setAlimentos(await leerAlimentos())
+      setError('')
+    } catch (e) {
+      console.error('Error recargando alimentos:', e)
     }
   }, [sesion])
 
@@ -102,6 +143,10 @@ export function AppProvider({ children }) {
       unidad_nombre: alimento.unidadNombre || null,
       unidad_medida: alimento.unidadMedida === 'ml' ? 'ml' : 'g',
       ...nutrientesAFila(alimento),
+      // Si estás en un hogar, lo que compres va a la despensa común. Si no,
+      // la clave ni se manda: así la app sigue funcionando aunque la
+      // migración 015 no esté aplicada y la columna no exista.
+      ...(hogarId ? { hogar_id: hogarId } : {}),
     }
 
     const { data, error: err } = await supabase
@@ -141,6 +186,27 @@ export function AppProvider({ children }) {
     return actualizado
   }
 
+  // Pasa a la despensa común los alimentos que ya tenías antes de entrar en
+  // el hogar. Al unirte no se comparte nada por sorpresa: esto es un botón
+  // que hay que pulsar. Devuelve cuántos se han compartido.
+  async function compartirMiDespensa() {
+    if (!hogarId) throw new Error('No estás en ningún hogar')
+
+    const { data, error: err } = await supabase
+      .from('alimentos')
+      .update({ hogar_id: hogarId })
+      .eq('usuario_id', sesion.user.id)
+      .is('hogar_id', null)
+      .select()
+
+    if (err) throw err
+
+    const actualizados = (data || []).map(filaAAlimento)
+    const porId = new Map(actualizados.map((a) => [a.id, a]))
+    setAlimentos((prev) => prev.map((a) => porId.get(a.id) || a))
+    return actualizados.length
+  }
+
   async function eliminarAlimento(id) {
     const { error: err } = await supabase.from('alimentos').delete().eq('id', id)
     if (err) throw err
@@ -154,6 +220,8 @@ export function AppProvider({ children }) {
     agregarAlimento,
     actualizarAlimento,
     eliminarAlimento,
+    compartirMiDespensa,
+    recargar,
   }
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
