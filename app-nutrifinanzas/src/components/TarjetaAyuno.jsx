@@ -1,19 +1,22 @@
 import { useEffect, useState } from 'react'
-import { Timer, Play, Square, Loader2, Check } from 'lucide-react'
+import { Timer, Play, Square, Loader2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import {
   cargarAyunoAbierto,
   empezarAyuno,
   terminarAyuno,
   duracionLegible,
-  horaObjetivo,
   horaSinSegundos,
   ultimaVezQueDieron,
 } from '../lib/ayuno.js'
-import { horaCorta } from '../utils/formato.js'
 
 // Tarjeta del ayuno intermitente en el diario. Solo aparece si lo has
-// activado en tu perfil: quien no ayuna no tiene por qué ver un cronómetro.
+// activado en tu perfil (el interruptor de EditorAyuno): quien no ayuna no
+// tiene por qué ver un cronómetro, y en cuanto lo desactivas la tarjeta
+// desaparece sola porque deja de cumplirse `ajustes?.activo`.
+//
+// Va en una fila compacta a propósito: comparte sitio con las tarjetas de
+// calorías y macros, y el ayuno es secundario frente a esas dos.
 //
 // El tiempo transcurrido NO se acumula aquí, se calcula como "ahora menos
 // la hora de inicio guardada". Por eso sigue contando bien aunque cierres
@@ -104,49 +107,53 @@ export default function TarjetaAyuno() {
   const cumplido = ayuno && transcurrido >= objetivoMs
   const pct = ayuno ? Math.min(100, (transcurrido / objetivoMs) * 100) : 0
 
-  // Tu ventana habitual, para saber a qué hora te toca romperlo
+  // Tu ventana habitual: casi nunca le das al botón justo al terminar de
+  // cenar, así que este atajo evita tener que corregir la cuenta a mano.
   const inicioHabitual = ultimaVezQueDieron(ajustes.horaInicio)
-  const finHabitual = horaCorta(
-    horaObjetivo(inicioHabitual, ajustes.horasObjetivo).toISOString()
-  )
 
   return (
-    <div className="bg-white rounded-3xl p-4 shadow-card animate-slide-up">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Timer size={18} className="text-brand-600" />
-          <span className="font-black text-gray-800">Ayuno</span>
-        </div>
-        <span className="text-xs font-bold text-gray-400">
-          {horaSinSegundos(ajustes.horaInicio)} → {finHabitual} · {ajustes.horasObjetivo} h
-        </span>
-      </div>
-
+    <div className="bg-white rounded-3xl p-3 shadow-card animate-slide-up">
       {cargando ? (
-        <div className="flex justify-center py-3">
-          <Loader2 className="animate-spin text-brand-400" size={20} />
+        <div className="flex items-center gap-3">
+          <IconoAyuno cumplido={false} />
+          <Loader2 className="animate-spin text-brand-400" size={18} />
         </div>
       ) : ayuno ? (
         <>
-          <div className="flex items-end justify-between mb-2">
-            <div>
-              <p className="text-2xl font-black text-gray-800 leading-none">
+          <div className="flex items-center gap-3">
+            <IconoAyuno cumplido={cumplido} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-bold text-gray-400">Ayuno</p>
+                <p
+                  className={`text-xs font-bold shrink-0 ${
+                    cumplido ? 'text-brand-600' : 'text-gray-400'
+                  }`}
+                >
+                  {cumplido
+                    ? 'Objetivo cumplido'
+                    : `Quedan ${duracionLegible(objetivoMs - transcurrido)}`}
+                </p>
+              </div>
+              <p className="font-black text-gray-800 text-lg leading-none mt-0.5">
                 {duracionLegible(transcurrido)}
               </p>
-              <p className="text-sm font-bold text-gray-400 mt-1">
-                {cumplido
-                  ? `Objetivo cumplido hace ${duracionLegible(transcurrido - objetivoMs)}`
-                  : `Te quedan ${duracionLegible(objetivoMs - transcurrido)}`}
-              </p>
             </div>
-            {cumplido && (
-              <span className="flex items-center gap-1 bg-brand-50 text-brand-700 font-extrabold text-xs px-2.5 py-1.5 rounded-full">
-                <Check size={14} /> Hecho
-              </span>
-            )}
+            <button
+              onClick={terminar}
+              disabled={guardando}
+              className="shrink-0 bg-gray-100 text-gray-600 font-bold text-xs px-3 py-2.5 rounded-xl flex items-center gap-1.5 active:scale-95 transition disabled:opacity-40"
+            >
+              {guardando ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Square size={12} />
+              )}
+              Fin
+            </button>
           </div>
 
-          <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden mb-3">
+          <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mt-2.5">
             <div
               className={`h-full rounded-full transition-all ${
                 cumplido ? 'bg-brand-600' : 'bg-brand-500'
@@ -154,54 +161,60 @@ export default function TarjetaAyuno() {
               style={{ width: `${pct}%` }}
             />
           </div>
-
-          <p className="text-xs font-semibold text-gray-400 mb-3">
-            Empezaste a las {horaCorta(ayuno.inicio.toISOString())} · objetivo a las{' '}
-            {horaCorta(horaObjetivo(ayuno.inicio, ayuno.horasObjetivo).toISOString())}
-          </p>
-
-          <button
-            onClick={terminar}
-            disabled={guardando}
-            className="w-full bg-gray-100 text-gray-600 font-bold py-3 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition disabled:opacity-40"
-          >
-            {guardando ? <Loader2 size={18} className="animate-spin" /> : <Square size={16} />}
-            Terminar ayuno
-          </button>
         </>
       ) : (
         <>
-          <p className="text-sm font-semibold text-gray-400 mb-3">
-            No estás ayunando ahora mismo.
-          </p>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-3">
+            <IconoAyuno cumplido={false} />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-gray-400">Ayuno</p>
+              <p className="font-black text-gray-800 text-lg leading-none mt-0.5">
+                {ajustes.horasObjetivo} h objetivo
+              </p>
+            </div>
+          </div>
+
+          <div className="flex gap-2 mt-3">
             <button
               onClick={() => empezar(null)}
               disabled={guardando}
-              className="flex-1 bg-brand-500 text-white font-bold py-3 rounded-2xl flex items-center justify-center gap-2 shadow-soft active:scale-[0.98] transition disabled:opacity-40"
+              className="flex-1 bg-brand-500 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 shadow-soft active:scale-[0.98] transition disabled:opacity-40"
             >
-              {guardando ? <Loader2 size={18} className="animate-spin" /> : <Play size={16} />}
-              Empezar ahora
+              {guardando ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Play size={13} />
+              )}
+              Empezar
             </button>
-            {/* Casi nunca le das al botón justo al terminar de cenar, así
-                que el atajo de "empecé a mi hora de siempre" evita tener
-                que corregir la cuenta a mano. */}
             <button
               onClick={() => empezar(inicioHabitual)}
               disabled={guardando}
-              className="flex-1 bg-white text-brand-700 font-bold py-3 rounded-2xl flex items-center justify-center shadow-card active:scale-[0.98] transition disabled:opacity-40 text-sm"
+              className="flex-1 bg-gray-50 text-brand-700 font-bold text-xs py-2.5 rounded-xl active:scale-[0.98] transition disabled:opacity-40"
             >
-              Desde las {horaSinSegundos(ajustes.horaInicio)}
+              Desde {horaSinSegundos(ajustes.horaInicio)}
             </button>
           </div>
         </>
       )}
 
       {error && (
-        <p className="bg-red-50 text-red-600 text-sm font-semibold rounded-xl px-4 py-2.5 mt-3">
+        <p className="bg-red-50 text-red-600 text-xs font-semibold rounded-xl px-3 py-2 mt-2.5">
           {error}
         </p>
       )}
+    </div>
+  )
+}
+
+function IconoAyuno({ cumplido }) {
+  return (
+    <div
+      className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${
+        cumplido ? 'bg-brand-500 text-white' : 'bg-brand-50 text-brand-600'
+      }`}
+    >
+      <Timer size={18} />
     </div>
   )
 }
