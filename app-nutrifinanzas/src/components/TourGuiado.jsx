@@ -10,6 +10,7 @@ import {
   Users,
   Timer,
   ListTodo,
+  Target,
   Settings2,
   X,
   ArrowLeft,
@@ -125,6 +126,15 @@ const PASOS_PERFIL = [
     titulo: 'Ayuno intermitente',
     texto: 'Actívalo si lo practicas, elige tu horario y encontrarás el contador en el Diario.',
     requiere: 'diario',
+  },
+  {
+    id: 'macros',
+    selector: '[data-tour="perfil-macros"]',
+    icon: Target,
+    color: 'brand',
+    titulo: 'Tus objetivos diarios',
+    texto: 'Las kcal y el reparto de macros que fijaste al configurar el modo completo.',
+    requiere: 'macros',
   },
   {
     id: 'modo',

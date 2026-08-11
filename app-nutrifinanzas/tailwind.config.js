@@ -23,7 +23,7 @@ export default {
         cream: '#faf8f3',
       },
       fontFamily: {
-        sans: ['Nunito', 'system-ui', 'sans-serif'],
+        sans: ['Manrope', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
         soft: '0 4px 20px -4px rgba(22, 163, 74, 0.15)',
