@@ -429,22 +429,40 @@ function SeccionComida({ comida, registros, plegada, onAlternar, onAnadir, onEli
 
   return (
     <div className="bg-white rounded-2xl shadow-card overflow-hidden animate-slide-up">
-      <button
-        onClick={onAlternar}
-        className="w-full px-4 py-3.5 flex items-center gap-2 text-left active:bg-gray-50 transition"
-      >
-        {plegada ? (
-          <ChevronRight size={18} className="text-gray-300 shrink-0" />
-        ) : (
-          <ChevronDown size={18} className="text-gray-300 shrink-0" />
+      <div className="w-full pl-4 pr-3 py-3 flex items-center gap-2">
+        <button
+          onClick={onAlternar}
+          className="flex-1 min-w-0 flex items-center gap-2 text-left active:opacity-70 transition"
+        >
+          {plegada ? (
+            <ChevronRight size={18} className="text-gray-300 shrink-0" />
+          ) : (
+            <ChevronDown size={18} className="text-gray-300 shrink-0" />
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="font-extrabold text-gray-800 text-[15px] truncate">
+              {comida.nombre}
+            </p>
+            <p className="text-xs text-gray-400 font-semibold truncate">
+              {registros.length === 0
+                ? 'Nada registrado'
+                : `${registros.length} · ${Math.round(kcal)} kcal`}
+            </p>
+          </div>
+        </button>
+
+        {onAnadir && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onAnadir()
+            }}
+            className="shrink-0 bg-brand-50 text-brand-600 font-bold text-xs px-4 py-2 rounded-full active:scale-95 transition"
+          >
+            + Añadir
+          </button>
         )}
-        <span className="font-black text-gray-800 uppercase text-sm tracking-wide flex-1 truncate">
-          {comida.nombre}
-        </span>
-        <span className="font-bold text-gray-400 text-sm shrink-0">
-          {Math.round(kcal)} kcal
-        </span>
-      </button>
+      </div>
 
       {!plegada && (
         <div className="px-4 pb-3">
@@ -489,15 +507,6 @@ function SeccionComida({ comida, registros, plegada, onAlternar, onAnadir, onEli
               </button>
             </div>
           ))}
-
-          {onAnadir && (
-            <button
-              onClick={onAnadir}
-              className="w-full mt-2 flex items-center justify-center gap-1.5 text-brand-600 font-bold text-sm py-2.5 rounded-xl bg-brand-50 active:scale-[0.98] transition"
-            >
-              <Plus size={16} /> Añadir
-            </button>
-          )}
         </div>
       )}
     </div>

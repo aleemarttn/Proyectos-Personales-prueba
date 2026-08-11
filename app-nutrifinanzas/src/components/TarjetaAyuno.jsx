@@ -142,7 +142,7 @@ export default function TarjetaAyuno() {
             <button
               onClick={terminar}
               disabled={guardando}
-              className="shrink-0 bg-gray-100 text-gray-600 font-bold text-xs px-3 py-2.5 rounded-xl flex items-center gap-1.5 active:scale-95 transition disabled:opacity-40"
+              className="shrink-0 bg-gray-100 text-gray-600 font-bold text-xs px-3.5 py-2.5 rounded-full flex items-center gap-1.5 active:scale-95 transition disabled:opacity-40"
             >
               {guardando ? (
                 <Loader2 size={13} className="animate-spin" />
@@ -178,7 +178,7 @@ export default function TarjetaAyuno() {
             <button
               onClick={() => empezar(null)}
               disabled={guardando}
-              className="flex-1 bg-brand-500 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 shadow-soft active:scale-[0.98] transition disabled:opacity-40"
+              className="flex-1 bg-brand-500 text-white font-bold text-xs py-2.5 rounded-full flex items-center justify-center gap-1.5 shadow-soft active:scale-[0.98] transition disabled:opacity-40"
             >
               {guardando ? (
                 <Loader2 size={14} className="animate-spin" />
@@ -190,7 +190,7 @@ export default function TarjetaAyuno() {
             <button
               onClick={() => empezar(inicioHabitual)}
               disabled={guardando}
-              className="flex-1 bg-gray-50 text-brand-700 font-bold text-xs py-2.5 rounded-xl active:scale-[0.98] transition disabled:opacity-40"
+              className="flex-1 bg-brand-50 text-brand-700 font-bold text-xs py-2.5 rounded-full active:scale-[0.98] transition disabled:opacity-40"
             >
               Desde {horaSinSegundos(ajustes.horaInicio)}
             </button>
