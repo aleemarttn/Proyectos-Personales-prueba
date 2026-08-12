@@ -9,6 +9,9 @@ import {
   CheckCircle2,
   RotateCcw,
   Plus,
+  Minus,
+  Users,
+  Target,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -46,6 +49,29 @@ export default function Recetas() {
   const [hecho, setHecho] = useState(false)
   const [errorGuardar, setErrorGuardar] = useState('')
 
+  // Cuántas raciones cocinar (escala las cantidades de ingredientes de la
+  // lista, no los macros por ración que ya vienen calculados por Gemini).
+  const [raciones, setRaciones] = useState(1)
+  // Solo modo completo: en vez de una ración "normal", encoge o agranda tu
+  // propia ración para que encaje justo en lo que te queda hoy de kcal.
+  const [ajustarObjetivo, setAjustarObjetivo] = useState(false)
+
+  // Lo que le quedaba hoy al usuario CUANDO SE GENERARON las recetas (mismo
+  // cálculo que se le manda a Gemini). A propósito NO se recalcula en cada
+  // render: si se recalculara contra `resumen` en vivo, registrar una
+  // receta cambia lo que queda hoy y las cantidades de las demás tarjetas
+  // se pondrían a 0 delante del usuario, aunque él siga mirando esa misma
+  // lista. Solo se vuelve a calcular al pulsar "Sugerir recetas".
+  const [objetivoRestante, setObjetivoRestante] = useState(null)
+
+  // Cuánto hay que multiplicar la ración "normal" de una receta para que
+  // encaje en lo que le queda hoy al usuario. 1 si el ajuste está apagado,
+  // no hay objetivo cargado, o la receta no tiene kcal estimadas.
+  function factorObjetivo(r) {
+    if (!ajustarObjetivo || !objetivoRestante || !r?.kcalEstimado) return 1
+    return objetivoRestante.kcal_restante / r.kcalEstimado
+  }
+
   useEffect(() => {
     if (comidaId || comidas.length === 0) return
     setComidaId(comidaSugeridaPorHora(comidas)?.id ?? null)
@@ -58,14 +84,15 @@ export default function Recetas() {
     setError('')
     setHecho(false)
     try {
-      const objetivoRestante = modoCompleto ? objetivoRestanteHoy(resumen) : null
+      const objetivoDeHoy = modoCompleto ? objetivoRestanteHoy(resumen) : null
 
-      const resultado = await generarRecetas(alimentos, objetivoRestante)
+      const resultado = await generarRecetas(alimentos, objetivoDeHoy)
       setRecetas(resultado.recetas || [])
       setRecomendadoIndice(resultado.recomendadoIndice || 0)
       setElegidoIndice(resultado.recomendadoIndice || 0)
       setMotivo(resultado.motivo || '')
-      setConObjetivo(!!objetivoRestante)
+      setConObjetivo(!!objetivoDeHoy)
+      setObjetivoRestante(objetivoDeHoy)
       setGenerado(true)
     } catch (e) {
       console.error('Error generando recetas:', e)
@@ -88,15 +115,19 @@ export default function Recetas() {
     setGuardando(true)
     setErrorGuardar('')
     try {
+      // Lo que se registra es TU ración (con el ajuste al objetivo si está
+      // activo), no la cantidad de toda la mesa: "raciones" solo escala la
+      // lista de ingredientes para cocinar, no lo que tú te comes.
+      const factor = factorObjetivo(receta)
       await agregarRegistros([
         {
           nombre: receta.nombre,
           cantidadG: 0,
           unidadMedida: 'g',
-          kcal: receta.kcalEstimado,
-          proteinas: receta.proteinasEstimado,
-          hidratos: receta.hidratosEstimado,
-          grasas: receta.grasasEstimado,
+          kcal: receta.kcalEstimado * factor,
+          proteinas: receta.proteinasEstimado != null ? receta.proteinasEstimado * factor : null,
+          hidratos: receta.hidratosEstimado != null ? receta.hidratosEstimado * factor : null,
+          grasas: receta.grasasEstimado != null ? receta.grasasEstimado * factor : null,
           origen: 'receta',
           comidaId,
         },
@@ -195,21 +226,118 @@ export default function Recetas() {
               no como un dato exacto.
             </p>
 
+            {/* Para cuántas personas cocinas: escala la lista de
+                ingredientes de cada receta (no los macros por ración). Se
+                desactiva mientras "Ajustar mi ración a hoy" está activo: no
+                tiene sentido multiplicar una ración ya ajustada a tus kcal
+                de hoy por el resto de comensales. */}
+            <div
+              className={`bg-white rounded-2xl p-4 shadow-card mb-2.5 flex items-center justify-between gap-3 transition ${
+                ajustarObjetivo ? 'opacity-40' : ''
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+                  <Users size={17} />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold text-gray-800 text-sm">¿Para cuántas personas?</p>
+                  <p className="text-xs text-gray-400 font-semibold">
+                    {ajustarObjetivo
+                      ? 'Desactivado: estás ajustando solo tu ración'
+                      : 'Ajusta las cantidades de cada ingrediente'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setRaciones((n) => Math.max(1, n - 1))}
+                  disabled={raciones <= 1 || ajustarObjetivo}
+                  className="w-8 h-8 rounded-full bg-gray-50 text-gray-600 flex items-center justify-center active:scale-90 transition disabled:opacity-30"
+                  aria-label="Menos personas"
+                >
+                  <Minus size={14} />
+                </button>
+                <span className="font-extrabold text-gray-800 w-4 text-center">{raciones}</span>
+                <button
+                  type="button"
+                  onClick={() => setRaciones((n) => Math.min(8, n + 1))}
+                  disabled={raciones >= 8 || ajustarObjetivo}
+                  className="w-8 h-8 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center active:scale-90 transition disabled:opacity-30"
+                  aria-label="Más personas"
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modo completo: ajustar tu propia ración a lo que te queda
+                hoy, en vez de a una ración "normal". */}
+            {modoCompleto && objetivoRestante && (
+              <button
+                type="button"
+                onClick={() => setAjustarObjetivo((v) => !v)}
+                className={`w-full text-left rounded-2xl p-4 shadow-card mb-2.5 flex items-center justify-between gap-3 transition ${
+                  ajustarObjetivo ? 'bg-brand-500' : 'bg-white'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                      ajustarObjetivo ? 'bg-white/20 text-white' : 'bg-brand-50 text-brand-600'
+                    }`}
+                  >
+                    <Target size={17} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className={`font-bold text-sm ${ajustarObjetivo ? 'text-white' : 'text-gray-800'}`}>
+                      Ajustar mi ración a hoy
+                    </p>
+                    <p className={`text-xs font-semibold ${ajustarObjetivo ? 'text-white/80' : 'text-gray-400'}`}>
+                      Te quedan ~{objetivoRestante.kcal_restante} kcal hoy
+                    </p>
+                  </div>
+                </div>
+                <span
+                  className={`shrink-0 w-11 h-6 rounded-full relative transition ${
+                    ajustarObjetivo ? 'bg-white/30' : 'bg-gray-200'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${
+                      ajustarObjetivo ? 'left-[22px]' : 'left-0.5'
+                    }`}
+                  />
+                </span>
+              </button>
+            )}
+
             <div className="space-y-2.5 mb-2">
-              {recetas.map((r, i) => (
+              {recetas.map((r, i) => {
+                const ajustando = ajustarObjetivo && !!objetivoRestante
+                return (
                 <RecetaCard
                   key={i}
                   receta={r}
                   recomendada={i === recomendadoIndice}
                   seleccionada={modoCompleto && i === elegidoIndice}
                   seleccionable={modoCompleto}
+                  // "Ajustar mi ración a hoy" y "para cuántas personas" no se
+                  // combinan: el ajuste es SOLO tu ración, no una ración
+                  // ajustada multiplicada por toda la mesa (cantidades
+                  // absurdas). Mientras está activo, manda el ajuste.
+                  multiplicador={ajustando ? factorObjetivo(r) : raciones}
+                  factorRacion={factorObjetivo(r)}
+                  ajustandoObjetivo={ajustando}
                   onClick={() => {
                     if (!modoCompleto) return
                     setElegidoIndice(i)
                     setHecho(false)
                   }}
                 />
-              ))}
+                )
+              })}
             </div>
 
             <button
@@ -293,7 +421,36 @@ export default function Recetas() {
   )
 }
 
-function RecetaCard({ receta, recomendada, seleccionada, seleccionable, onClick }) {
+// Cuánto pesa/mide un ingrediente ya escalado, en texto legible. Sin
+// cantidad (sal, especias...) se muestra solo la unidad ("al gusto").
+function formatearCantidad(ingrediente, multiplicador) {
+  if (ingrediente.cantidad == null) return ingrediente.unidad || 'al gusto'
+  const valor = ingrediente.cantidad * multiplicador
+  const decimales = valor < 10 ? 1 : 0
+  const redondeado = Math.round(valor * 10 ** decimales) / 10 ** decimales
+  return `${redondeado.toString().replace('.', ',')} ${ingrediente.unidad}`
+}
+
+function RecetaCard({
+  receta,
+  recomendada,
+  seleccionada,
+  seleccionable,
+  multiplicador,
+  factorRacion = 1,
+  ajustandoObjetivo,
+  onClick,
+}) {
+  const tieneCantidades = receta.ingredientes?.length > 0
+  // Los macros son "por ración": solo se ven afectados por el ajuste al
+  // objetivo de hoy, no por cuánta gente hay en la mesa.
+  const kcalRacion = receta.kcalEstimado != null ? receta.kcalEstimado * factorRacion : null
+  const proteinasRacion =
+    receta.proteinasEstimado != null ? receta.proteinasEstimado * factorRacion : null
+  const hidratosRacion =
+    receta.hidratosEstimado != null ? receta.hidratosEstimado * factorRacion : null
+  const grasasRacion = receta.grasasEstimado != null ? receta.grasasEstimado * factorRacion : null
+
   return (
     <button
       type="button"
@@ -312,30 +469,47 @@ function RecetaCard({ receta, recomendada, seleccionada, seleccionable, onClick 
         )}
       </div>
 
-      {receta.ingredientesUsados.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-2">
-          {receta.ingredientesUsados.map((ing, i) => (
-            <span
-              key={i}
-              className="text-[11px] font-bold text-gray-500 bg-gray-50 px-2 py-1 rounded-lg flex items-center gap-1"
-            >
-              <Plus size={10} /> {ing}
-            </span>
+      {/* Con cantidades (lo normal): lista de la compra/cocina para las
+          personas y el ajuste elegidos arriba. Sin ellas (receta antigua o
+          la IA no las devolvió): los chips de antes, sin cantidad. */}
+      {tieneCantidades ? (
+        <div className="bg-gray-50 rounded-xl px-3 py-2.5 mb-2 space-y-1">
+          {receta.ingredientes.map((ing, i) => (
+            <div key={i} className="flex items-baseline justify-between gap-3 text-xs">
+              <span className="text-gray-600 font-semibold truncate">{ing.nombre}</span>
+              <span className="text-gray-800 font-bold shrink-0">
+                {formatearCantidad(ing, multiplicador)}
+              </span>
+            </div>
           ))}
         </div>
+      ) : (
+        receta.ingredientesUsados.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {receta.ingredientesUsados.map((ing, i) => (
+              <span
+                key={i}
+                className="text-[11px] font-bold text-gray-500 bg-gray-50 px-2 py-1 rounded-lg flex items-center gap-1"
+              >
+                <Plus size={10} /> {ing}
+              </span>
+            ))}
+          </div>
+        )
       )}
 
       {receta.pasos && <p className="text-sm text-gray-500 mb-2">{receta.pasos}</p>}
 
-      {receta.kcalEstimado != null ? (
+      {kcalRacion != null ? (
         <p className="text-sm text-gray-500 font-semibold flex items-center gap-1.5">
-          <Flame size={14} className="text-brand-400" /> ~{Math.round(receta.kcalEstimado)} kcal
-          {receta.proteinasEstimado != null && ` · P ~${Math.round(receta.proteinasEstimado)}g`}
-          {receta.hidratosEstimado != null && ` · H ~${Math.round(receta.hidratosEstimado)}g`}
-          {receta.grasasEstimado != null && ` · G ~${Math.round(receta.grasasEstimado)}g`}
+          <Flame size={14} className="text-brand-400" /> ~{Math.round(kcalRacion)} kcal
+          {proteinasRacion != null && ` · P ~${Math.round(proteinasRacion)}g`}
+          {hidratosRacion != null && ` · H ~${Math.round(hidratosRacion)}g`}
+          {grasasRacion != null && ` · G ~${Math.round(grasasRacion)}g`}
           {receta.confianza === 'baja' && (
             <span className="text-gray-300 font-bold"> (poco fiable)</span>
           )}
+          {ajustandoObjetivo && ' · tu ración de hoy'}
         </p>
       ) : (
         <p className="text-sm text-gray-400 font-semibold">Sin macros estimados</p>

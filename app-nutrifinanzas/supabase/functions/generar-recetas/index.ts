@@ -129,6 +129,14 @@ Reglas importantes:
 
 ${instruccionObjetivo}
 
+Además, para CADA receta incluye la lista completa de ingredientes con cantidad para preparar UNA
+ración normal (una persona), en el campo "ingredientes": tanto los que salen de la despensa como
+los básicos que asumas (sal, aceite, ajo...). Sin esto el usuario no puede cocinar el plato.
+- "cantidad" es siempre un número (o null si no se mide, como la sal "al gusto").
+- "unidad" es corta: "g", "ml", "unidad", "cucharada", "diente", "pizca" o "al gusto".
+- Usa gramos o mililitros salvo que otra unidad sea más natural (ej. "2 unidad" para huevos, "1
+  diente" para ajo).
+
 Devuelve SOLO un JSON (sin markdown, sin texto adicional) con esta forma exacta:
 
 {
@@ -136,6 +144,9 @@ Devuelve SOLO un JSON (sin markdown, sin texto adicional) con esta forma exacta:
     {
       "nombre": "...",
       "ingredientes_usados": ["nombre tal cual aparece en la lista", "..."],
+      "ingredientes": [
+        { "nombre": "...", "cantidad": numero_o_null, "unidad": "g" }
+      ],
       "pasos": "1-2 frases MUY breves explicando cómo se prepara, en español",
       "kcal_estimado": numero_o_null,
       "proteinas_estimado": numero_o_null,
@@ -148,8 +159,8 @@ Devuelve SOLO un JSON (sin markdown, sin texto adicional) con esta forma exacta:
   "motivo": "frase corta o cadena vacía"
 }
 
-Los macros son SIEMPRE una estimación por ración normal: no inventes precisión que no tienes,
-usa "confianza": "baja" si la ración o la preparación son muy variables.
+Los macros y las cantidades son SIEMPRE una estimación por ración normal: no inventes precisión
+que no tienes, usa "confianza": "baja" si la ración o la preparación son muy variables.
 Responde ÚNICAMENTE con el JSON, nada más.`
 }
 
@@ -238,6 +249,19 @@ function num(v: any) {
   return Number.isFinite(n) && n >= 0 ? n : null
 }
 
+const UNIDADES_VALIDAS = ['g', 'ml', 'unidad', 'cucharada', 'diente', 'pizca', 'al gusto']
+
+// Fila de "ingredientes" -> objeto validado, o null si no tiene ni nombre.
+// Sin nombre no hay nada que mostrar; el resto se rellena con valores
+// razonables en vez de descartar la receta entera por un campo suelto.
+function normalizarIngrediente(i: any) {
+  const nombre = String(i?.nombre || '').trim()
+  if (!nombre) return null
+  const cantidad = num(i?.cantidad)
+  const unidad = UNIDADES_VALIDAS.includes(i?.unidad) ? i.unidad : cantidad === null ? 'al gusto' : 'g'
+  return { nombre, cantidad, unidad }
+}
+
 function normalizarRecetas(json: any) {
   const recetasBrutas = Array.isArray(json?.recetas) ? json.recetas : []
 
@@ -256,11 +280,15 @@ function normalizarRecetas(json: any) {
     // cumple la regla que le pedimos al modelo; mejor descartarla que
     // enseñar algo que no tiene sentido.
     if (!nombre || ingredientesUsados.length < 2) return
+    const ingredientes = Array.isArray(r?.ingredientes)
+      ? r.ingredientes.map(normalizarIngrediente).filter(Boolean)
+      : []
     validas.push({
       indiceOriginal,
       receta: {
         nombre,
         ingredientesUsados,
+        ingredientes,
         pasos: typeof r?.pasos === 'string' ? r.pasos.trim() : '',
         kcalEstimado: num(r?.kcal_estimado),
         proteinasEstimado: num(r?.proteinas_estimado),
