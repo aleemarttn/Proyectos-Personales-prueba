@@ -13,6 +13,8 @@ const MENSAJES = {
   YA_EN_HOGAR: 'Ya estás en un hogar. Sal de él antes de entrar en otro.',
   CODIGO_INVALIDO: 'Ese código no existe. Revísalo.',
   HOGAR_LLENO: 'Ese hogar ya tiene 8 personas.',
+  DEMASIADOS_INTENTOS:
+    'Has probado demasiados códigos seguidos. Espera un minuto e inténtalo de nuevo.',
 }
 
 export function mensajeDeError(e) {
