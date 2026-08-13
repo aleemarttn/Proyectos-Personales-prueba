@@ -3,7 +3,7 @@
 Esta es una **app navegable** de nutrición + finanzas personales.
 Ya tiene **cuentas de usuario reales** (registro e inicio de sesión) con la
 base de datos en la nube (**Supabase**). El escáner de tickets y las recetas
-con IA todavía son simulados / están por construir.
+usan IA real (Gemini) desde una Edge Function de Supabase.
 
 Esta guía está escrita para personas **sin conocimientos de programación**.
 Sigue los pasos en orden y no te saltes ninguno. 🙂
@@ -122,8 +122,8 @@ http://localhost:5173
    - **Sencilla:** solo nombre, edad, género y comunidad autónoma/provincia (sin macros).
 4. **Despensa:** empieza vacía (cada cuenta tiene la suya). Puedes:
    - **Añadir** un alimento a mano.
-   - **Escanear** un ticket (simulado: sale una "cámara", un spinner de ~1,5s
-     y rellena solo un producto de ejemplo).
+   - **Escanear** un ticket o un código de barras: la foto se analiza con IA
+     (Gemini) y rellena los productos detectados.
    - **Eliminar** alimentos con la papelera.
 5. **Gastos:** gasto total, gráfico de tarta por categoría, barras por
    supermercado y lista de últimas compras.
@@ -160,7 +160,8 @@ http://localhost:5173
   Cliente en `src/lib/supabase.js`; sesión y perfil en `src/context/AuthContext.jsx`;
   alimentos (despensa) en `src/context/AppContext.jsx`.
   Esquema SQL en `supabase/schema.sql`. Claves en `.env` (ver `.env.example`).
-- El escáner de tickets (OCR) y las recetas con IA **todavía son simulados**.
+- El escáner de tickets (OCR) y las recetas usan IA real (Gemini), vía las
+  Edge Functions `analizar-imagen` y `generar-recetas`.
 
 Estructura de carpetas:
 
@@ -174,7 +175,7 @@ app-nutrifinanzas/
 │   ├── lib/                (cliente de Supabase)
 │   ├── context/            (AuthContext = sesión+perfil; AppContext = alimentos)
 │   ├── components/         (carcasa de móvil y barra inferior)
-│   ├── data/               (categorías, supermercados y tickets simulados)
+│   ├── data/               (categorías, supermercados y regiones)
 │   ├── utils/              (formato de euros y fechas)
 │   └── pages/              (las pantallas: Bienvenida, Login, Registro,
 │                            Onboarding, Despensa, AñadirAlimento, Escanear,
