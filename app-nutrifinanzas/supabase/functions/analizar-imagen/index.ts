@@ -8,6 +8,15 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest'
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')
 
+const MIME_TYPES_VALIDOS = ['image/jpeg', 'image/png', 'image/webp']
+
+// Base64 tiene ~4/3 del tamaño del binario original. 7,000,000 caracteres
+// son ~5,25 MB binarios: de sobra para una foto ya comprimida por
+// comprimirImagen() en el cliente (canvas.toDataURL con calidad reducida),
+// y suficiente para frenar un payload desproporcionado antes de gastar
+// tiempo/cuota de Gemini en él.
+const MAX_BASE64_CHARS = 7_000_000
+
 const CATEGORIAS_VALIDAS = [
   'Proteínas',
   'Hidratos',
@@ -18,12 +27,38 @@ const CATEGORIAS_VALIDAS = [
   'Otros',
 ]
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+// Lista blanca de orígenes desde variable de entorno (separados por comas),
+// más el dominio de producción conocido y localhost para desarrollo, como
+// red de seguridad si se despliega esto sin fijar el secreto ALLOWED_ORIGINS
+// primero. Un origen no listado simplemente no recibe cabecera
+// Access-Control-Allow-Origin, así que el navegador bloquea la lectura de la
+// respuesta (la petición de un usuario autenticado desde un origen ajeno no
+// consigue leer el resultado).
+// IMPORTANTE al desplegar: fija el secreto real con
+//   supabase secrets set ALLOWED_ORIGINS=https://tu-dominio.com,https://otro-dominio.com
+// El valor de abajo es solo un fallback para no romper producción si se
+// despliega antes de fijarlo.
+const ORIGENES_PERMITIDOS = (Deno.env.get('ALLOWED_ORIGINS') || 'https://nutri-gasto-app-1ppr.vercel.app')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean)
+  .concat(['http://localhost:5173', 'http://127.0.0.1:5173'])
+
+function corsHeaders(req: Request) {
+  const origen = req.headers.get('Origin') || ''
+  const headers: Record<string, string> = {
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    Vary: 'Origin',
+  }
+  if (ORIGENES_PERMITIDOS.includes(origen)) {
+    headers['Access-Control-Allow-Origin'] = origen
+  }
+  return headers
 }
 
 Deno.serve(async (req) => {
+  const CORS_HEADERS = corsHeaders(req)
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: CORS_HEADERS })
   }
@@ -32,7 +67,7 @@ Deno.serve(async (req) => {
     // Solo usuarios autenticados de la app pueden usar el analizador
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return jsonError('No autorizado', 401)
+      return jsonError('No autorizado', 401, CORS_HEADERS)
     }
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
@@ -41,7 +76,7 @@ Deno.serve(async (req) => {
     )
     const { data: userData, error: userErr } = await supabase.auth.getUser()
     if (userErr || !userData?.user) {
-      return jsonError('No autorizado', 401)
+      return jsonError('No autorizado', 401, CORS_HEADERS)
     }
 
     // Límite en base de datos (no solo en el frontend): 15/minuto y
@@ -56,26 +91,32 @@ Deno.serve(async (req) => {
     })
     if (limiteErr) {
       console.error('Error comprobando el límite de peticiones:', limiteErr)
-      return jsonError('No se pudo analizar la imagen.', 500)
+      return jsonError('No se pudo analizar la imagen.', 500, CORS_HEADERS)
     }
     if (!permitido) {
-      return jsonError('Has hecho demasiadas peticiones seguidas. Espera un momento e inténtalo de nuevo.', 429)
+      return jsonError('Has hecho demasiadas peticiones seguidas. Espera un momento e inténtalo de nuevo.', 429, CORS_HEADERS)
     }
 
     if (!GEMINI_API_KEY) {
-      return jsonError('El servidor no tiene configurada la clave de Gemini.', 500)
+      return jsonError('El servidor no tiene configurada la clave de Gemini.', 500, CORS_HEADERS)
     }
 
     const { modo, imagenBase64, mimeType, objetivoRestante } = await req.json()
     if (!modo || !imagenBase64) {
-      return jsonError('Faltan datos: modo o imagenBase64.', 400)
+      return jsonError('Faltan datos: modo o imagenBase64.', 400, CORS_HEADERS)
     }
     if (modo !== 'ticket' && modo !== 'producto' && modo !== 'nutricion' && modo !== 'carta') {
-      return jsonError('modo debe ser "ticket", "producto", "nutricion" o "carta".', 400)
+      return jsonError('modo debe ser "ticket", "producto", "nutricion" o "carta".', 400, CORS_HEADERS)
+    }
+    if (!MIME_TYPES_VALIDOS.includes(mimeType)) {
+      return jsonError('Formato de imagen no soportado. Usa JPEG, PNG o WebP.', 400, CORS_HEADERS)
+    }
+    if (imagenBase64.length > MAX_BASE64_CHARS) {
+      return jsonError('La imagen es demasiado grande.', 413, CORS_HEADERS)
     }
 
     const prompt = modo === 'carta' ? construirPromptCarta(objetivoRestante) : construirPrompt(modo)
-    const resultado = await llamarGemini(prompt, imagenBase64, mimeType || 'image/jpeg', modo)
+    const resultado = await llamarGemini(prompt, imagenBase64, mimeType, modo)
 
     return new Response(JSON.stringify(resultado), {
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
@@ -85,17 +126,18 @@ Deno.serve(async (req) => {
     if (e instanceof Error && e.message === 'CUOTA_EXCEDIDA') {
       return jsonError(
         'Se ha alcanzado el límite de peticiones a la IA por ahora. Espera unos minutos e inténtalo de nuevo.',
-        429
+        429,
+        CORS_HEADERS
       )
     }
-    return jsonError('No se pudo analizar la imagen.', 500)
+    return jsonError('No se pudo analizar la imagen.', 500, CORS_HEADERS)
   }
 })
 
-function jsonError(mensaje: string, status: number) {
+function jsonError(mensaje: string, status: number, corsHeaders: Record<string, string>) {
   return new Response(JSON.stringify({ error: mensaje }), {
     status,
-    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
 }
 
