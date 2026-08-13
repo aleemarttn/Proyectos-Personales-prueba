@@ -190,6 +190,7 @@ export default function DetalleAlimento({ alimento, onCerrar }) {
                       precio: alimento.precio ?? '',
                       pesoUnidadG: alimento.pesoUnidadG ?? '',
                       unidadNombre: alimento.unidadNombre || '',
+                      unidadMedida: unidadDe(alimento),
                     })
                     setEditandoDatos(true)
                   }}

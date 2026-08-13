@@ -273,6 +273,7 @@ export default function Onboarding() {
             <BotonContinuar
               onClick={finalizar}
               cargando={guardando}
+              deshabilitado={sumaMacros !== 100}
               texto="Crear perfil"
             />
           </div>
@@ -362,11 +363,11 @@ function Slider({ label, valor, onChange, color }) {
   )
 }
 
-function BotonContinuar({ onClick, texto, cargando }) {
+function BotonContinuar({ onClick, texto, cargando, deshabilitado = false }) {
   return (
     <button
       onClick={onClick}
-      disabled={cargando}
+      disabled={cargando || deshabilitado}
       className="w-full bg-brand-500 text-white font-extrabold text-lg py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-soft mt-6 disabled:opacity-70"
     >
       {cargando ? (

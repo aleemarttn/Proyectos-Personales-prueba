@@ -479,7 +479,7 @@ function RecetaCard({
           ))}
         </div>
       ) : (
-        receta.ingredientesUsados.length > 0 && (
+        receta.ingredientesUsados?.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">
             {receta.ingredientesUsados.map((ing, i) => (
               <span

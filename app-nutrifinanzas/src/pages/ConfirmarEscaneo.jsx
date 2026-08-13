@@ -110,60 +110,87 @@ export default function ConfirmarEscaneo() {
     setEscanerItem(null)
   }
 
+  async function guardarUno(it) {
+    await agregarAlimento(
+      {
+        nombre: it.nombre.trim(),
+        marca: it.marca.trim() || null,
+        cantidad: it.cantidad || '1 ud',
+        kcal: it.kcal ?? 0,
+        proteinas: it.proteinas,
+        hidratos: it.hidratos,
+        grasas: it.grasas,
+        ...nutrientesDe(it),
+        precio: aNumero(it.precio) ?? 0,
+        supermercado,
+        categoria: it.categoria,
+        codigoBarras: it.codigoBarras,
+        pesoUnidadG: it.pesoUnidadG,
+        unidadNombre: it.unidadNombre.trim() || null,
+        unidadMedida: it.unidadMedida,
+      },
+      'escaner'
+    )
+
+    // Si es un producto nuevo identificado por código de barras (no estaba
+    // ya en el catálogo compartido) y tiene macros, lo sumamos al catálogo
+    // para que la próxima persona no tenga que escanearlo.
+    if (it.codigoBarras && !it.encontradoEnCatalogo && it.kcal != null) {
+      await guardarProductoEnCatalogo({
+        codigoBarras: it.codigoBarras,
+        nombre: it.nombre.trim(),
+        marca: it.marca.trim() || null,
+        kcal: it.kcal,
+        proteinas: it.proteinas,
+        hidratos: it.hidratos,
+        grasas: it.grasas,
+        ...nutrientesDe(it),
+        categoria: it.categoria,
+        pesoUnidadG: it.pesoUnidadG,
+        unidadNombre: it.unidadNombre.trim() || null,
+        unidadMedida: it.unidadMedida,
+      })
+    }
+  }
+
+  // Guarda cada item por separado y, si alguno falla (red, RLS...), lo deja
+  // en la lista para reintentar SOLO ese: sin esto, reintentar volvía a
+  // mandar también los que ya se habían guardado bien, duplicándolos en la
+  // despensa.
   async function guardarTodo() {
     if (items.length === 0) return
     setGuardando(true)
     setError('')
-    try {
-      for (const it of items) {
-        if (!it.nombre.trim()) continue
-        await agregarAlimento(
-          {
-            nombre: it.nombre.trim(),
-            marca: it.marca.trim() || null,
-            cantidad: it.cantidad || '1 ud',
-            kcal: it.kcal ?? 0,
-            proteinas: it.proteinas,
-            hidratos: it.hidratos,
-            grasas: it.grasas,
-            ...nutrientesDe(it),
-            precio: it.precio === '' ? 0 : Number(it.precio),
-            supermercado,
-            categoria: it.categoria,
-            codigoBarras: it.codigoBarras,
-            pesoUnidadG: it.pesoUnidadG,
-            unidadNombre: it.unidadNombre.trim() || null,
-            unidadMedida: it.unidadMedida,
-          },
-          'escaner'
-        )
 
-        // Si es un producto nuevo identificado por código de barras (no
-        // estaba ya en el catálogo compartido) y tiene macros, lo sumamos
-        // al catálogo para que la próxima persona no tenga que escanearlo.
-        if (it.codigoBarras && !it.encontradoEnCatalogo && it.kcal != null) {
-          await guardarProductoEnCatalogo({
-            codigoBarras: it.codigoBarras,
-            nombre: it.nombre.trim(),
-            marca: it.marca.trim() || null,
-            kcal: it.kcal,
-            proteinas: it.proteinas,
-            hidratos: it.hidratos,
-            grasas: it.grasas,
-            ...nutrientesDe(it),
-            categoria: it.categoria,
-            pesoUnidadG: it.pesoUnidadG,
-            unidadNombre: it.unidadNombre.trim() || null,
-            unidadMedida: it.unidadMedida,
-          })
-        }
+    const restantes = []
+    let huboFallo = false
+
+    for (const it of items) {
+      if (!it.nombre.trim()) {
+        restantes.push(it)
+        continue
       }
-      navigate('/despensa')
-    } catch (e) {
-      console.error('Error guardando los alimentos escaneados:', e)
-      setError('No se pudo guardar. Inténtalo de nuevo.')
-      setGuardando(false)
+      try {
+        await guardarUno(it)
+      } catch (e) {
+        console.error(`Error guardando "${it.nombre}":`, e)
+        restantes.push(it)
+        huboFallo = true
+      }
     }
+
+    if (!huboFallo) {
+      navigate('/despensa')
+      return
+    }
+
+    setItems(restantes)
+    setError(
+      restantes.length === items.length
+        ? 'No se pudo guardar. Inténtalo de nuevo.'
+        : `${items.length - restantes.length} alimento(s) guardados. Los demás no se pudieron guardar: revísalos e inténtalo de nuevo.`
+    )
+    setGuardando(false)
   }
 
   return (

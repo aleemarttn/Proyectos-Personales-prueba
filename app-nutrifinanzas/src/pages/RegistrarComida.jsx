@@ -210,7 +210,7 @@ export default function RegistrarComida() {
         nombre: manual.nombre.trim(),
         cantidadG: aNumero(manual.cantidadG) || 0,
         unidadMedida: manual.unidadMedida,
-        kcal: Number(manual.kcal) || 0,
+        kcal: aNumero(manual.kcal) ?? 0,
         proteinas: aNumero(manual.proteinas),
         hidratos: aNumero(manual.hidratos),
         grasas: aNumero(manual.grasas),
