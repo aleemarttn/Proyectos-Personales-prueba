@@ -15,6 +15,10 @@ export function colorCategoria(id) {
   return c ? c.color : '#94a3b8'
 }
 
+// El más habitual en España: preselección al añadir un alimento a mano o
+// tras escanear un ticket sin supermercado detectado.
+export const SUPERMERCADO_POR_DEFECTO = 'Mercadona'
+
 // Lista de supermercados habituales en España (respaldo mientras carga la
 // lista comunitaria real desde Supabase; ver lib/supermercados.js).
 export const SUPERMERCADOS = [

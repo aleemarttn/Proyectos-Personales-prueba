@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -12,7 +12,7 @@ import {
 import { useAuth } from '../context/AuthContext.jsx'
 import { useDiario } from '../context/DiarioContext.jsx'
 import { esCompleto } from '../lib/modos.js'
-import { comidaSugeridaPorHora } from '../lib/comidas.js'
+import { useComidaSugerida } from '../hooks/useComidaSugerida.js'
 
 // Resultado del análisis de la carta (AnalizarCarta.jsx): muestra los platos
 // detectados con el recomendado destacado y por qué. En modo simple ahí
@@ -33,15 +33,10 @@ export default function ConfirmarCarta() {
   const modoCompleto = esCompleto(perfil?.tipo)
 
   const [elegidoIndice, setElegidoIndice] = useState(recomendadoIndice)
-  const [comidaId, setComidaId] = useState(null)
+  const [comidaId, setComidaId] = useComidaSugerida(comidas)
   const [guardando, setGuardando] = useState(false)
   const [hecho, setHecho] = useState(false)
   const [error, setError] = useState('')
-
-  useEffect(() => {
-    if (comidaId || comidas.length === 0) return
-    setComidaId(comidaSugeridaPorHora(comidas)?.id ?? null)
-  }, [comidas, comidaId])
 
   if (platos.length === 0) {
     return (

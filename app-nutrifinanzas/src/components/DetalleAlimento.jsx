@@ -7,6 +7,7 @@ import { unidadDe } from '../utils/unidades.js'
 import EscanerNutricional from './EscanerNutricional.jsx'
 import SelectorUnidad from './SelectorUnidad.jsx'
 import { guardarProductoEnCatalogo } from '../lib/productos.js'
+import { aNumero } from '../utils/numero.js'
 
 // Ficha de un alimento (bottom sheet). Muestra sus datos y la información
 // nutricional por 100 g/ml. Como no hay pantalla de edición aparte, deja
@@ -46,12 +47,6 @@ export default function DetalleAlimento({ alimento, onCerrar }) {
 
   function set(campo, valor) {
     setForm((f) => ({ ...f, [campo]: valor }))
-  }
-
-  function aNumero(v) {
-    if (v === '' || v === null || v === undefined) return null
-    const n = Number(String(v).replace(',', '.'))
-    return Number.isFinite(n) ? n : null
   }
 
   function macrosDetectados(nutricion) {

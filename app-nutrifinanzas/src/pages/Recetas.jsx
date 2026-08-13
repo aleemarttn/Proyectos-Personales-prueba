@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import {
   ChefHat,
   Sparkles,
@@ -17,7 +17,7 @@ import { useApp } from '../context/AppContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useDiario } from '../context/DiarioContext.jsx'
 import { esCompleto } from '../lib/modos.js'
-import { comidaSugeridaPorHora } from '../lib/comidas.js'
+import { useComidaSugerida } from '../hooks/useComidaSugerida.js'
 import { generarRecetas } from '../lib/recetas.js'
 import { objetivoRestanteHoy } from '../lib/macros.js'
 
@@ -44,7 +44,7 @@ export default function Recetas() {
   const [error, setError] = useState('')
 
   const [elegidoIndice, setElegidoIndice] = useState(0)
-  const [comidaId, setComidaId] = useState(null)
+  const [comidaId, setComidaId] = useComidaSugerida(comidas)
   const [guardando, setGuardando] = useState(false)
   const [hecho, setHecho] = useState(false)
   const [errorGuardar, setErrorGuardar] = useState('')
@@ -71,11 +71,6 @@ export default function Recetas() {
     if (!ajustarObjetivo || !objetivoRestante || !r?.kcalEstimado) return 1
     return objetivoRestante.kcal_restante / r.kcalEstimado
   }
-
-  useEffect(() => {
-    if (comidaId || comidas.length === 0) return
-    setComidaId(comidaSugeridaPorHora(comidas)?.id ?? null)
-  }, [comidas, comidaId])
 
   const suficientesAlimentos = alimentos.length >= 2
 

@@ -18,10 +18,11 @@ import { buscarProductosPorNombre } from '../lib/productos.js'
 import { cargarRecientes } from '../lib/recientes.js'
 import { avisosDe } from '../lib/avisos.js'
 import { nutrientesPorCantidad } from '../lib/nutrientes.js'
-import { comidaSugeridaPorHora } from '../lib/comidas.js'
+import { useComidaSugerida } from '../hooks/useComidaSugerida.js'
 import { esHoy, etiquetaDia, fechaLarga } from '../lib/fechas.js'
 import SelectorUnidad from '../components/SelectorUnidad.jsx'
 import { unidadDe, conUnidad } from '../utils/unidades.js'
+import { aNumero } from '../utils/numero.js'
 
 const TABS = [
   { id: 'recientes', label: 'Recientes' },
@@ -29,13 +30,6 @@ const TABS = [
   { id: 'catalogo', label: 'Catálogo' },
   { id: 'manual', label: 'Manual' },
 ]
-
-// Convierte '' -> null y texto -> número (para las columnas numéricas)
-function aNumero(v) {
-  if (v === '' || v === null || v === undefined) return null
-  const n = Number(String(v).replace(',', '.'))
-  return Number.isFinite(n) ? n : null
-}
 
 // Formulario para registrar una comida consumida, desde tres orígenes
 // posibles: un alimento de la despensa, un producto del catálogo
@@ -60,15 +54,8 @@ export default function RegistrarComida() {
 
   // A qué comida del día se registra. Si venimos del botón "+ Añadir" de
   // una comida concreta del diario llega en la URL; si no, se propone la
-  // más probable según la hora.
-  const [comidaId, setComidaId] = useState(params.get('comida') || null)
-
-  // Las comidas llegan de forma asíncrona: en cuanto están, si no había
-  // ninguna elegida (ni por URL) proponemos la de la hora actual.
-  useEffect(() => {
-    if (comidaId || comidas.length === 0) return
-    setComidaId(comidaSugeridaPorHora(comidas)?.id ?? null)
-  }, [comidas, comidaId])
+  // más probable según la hora en cuanto las comidas cargan (asíncrono).
+  const [comidaId, setComidaId] = useComidaSugerida(comidas, params.get('comida') || null)
 
   // Selección de despensa/catálogo + cantidad consumida
   const [seleccionado, setSeleccionado] = useState(null)

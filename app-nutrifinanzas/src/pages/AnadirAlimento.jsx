@@ -2,11 +2,12 @@ import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, Check, Loader2, CheckCircle2, ScanLine } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { CATEGORIAS } from '../data/categorias.js'
+import { CATEGORIAS, SUPERMERCADO_POR_DEFECTO } from '../data/categorias.js'
 import EscanerNutricional from '../components/EscanerNutricional.jsx'
 import SupermercadoSelector from '../components/SupermercadoSelector.jsx'
 import SelectorUnidad from '../components/SelectorUnidad.jsx'
 import { adivinarUnidad } from '../utils/unidades.js'
+import { aNumero } from '../utils/numero.js'
 
 // Formulario para añadir un alimento. Si venimos del escáner, llega
 // con datos ya rellenados (location.state.prefill).
@@ -26,7 +27,7 @@ export default function AnadirAlimento() {
     hidratos: prefill.hidratos ?? '',
     grasas: prefill.grasas ?? '',
     precio: prefill.precio || '',
-    supermercado: prefill.supermercado || 'Mercadona',
+    supermercado: prefill.supermercado || SUPERMERCADO_POR_DEFECTO,
     categoria: prefill.categoria || 'Otros',
     pesoUnidadG: prefill.pesoUnidadG ?? '',
     unidadNombre: prefill.unidadNombre || '',
@@ -47,13 +48,6 @@ export default function AnadirAlimento() {
 
   function set(campo, valor) {
     setForm({ ...form, [campo]: valor })
-  }
-
-  // Convierte '' -> null y texto -> número (para las columnas numéricas)
-  function aNumero(v) {
-    if (v === '' || v === null || v === undefined) return null
-    const n = Number(String(v).replace(',', '.'))
-    return Number.isFinite(n) ? n : null
   }
 
   // Recibe los macros leídos de la etiqueta y rellena el formulario.

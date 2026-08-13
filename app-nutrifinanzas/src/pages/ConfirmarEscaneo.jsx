@@ -2,20 +2,14 @@ import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, Check, Loader2, Trash2, AlertTriangle, ScanLine } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { CATEGORIAS } from '../data/categorias.js'
+import { CATEGORIAS, SUPERMERCADO_POR_DEFECTO } from '../data/categorias.js'
 import EscanerNutricional from '../components/EscanerNutricional.jsx'
 import SupermercadoSelector from '../components/SupermercadoSelector.jsx'
 import { guardarProductoEnCatalogo } from '../lib/productos.js'
 import SelectorUnidad from '../components/SelectorUnidad.jsx'
 import { adivinarUnidad } from '../utils/unidades.js'
 import { nutrientesDe } from '../lib/nutrientes.js'
-
-// Convierte '' -> null y texto -> número (para peso por unidad)
-function aNumero(v) {
-  if (v === '' || v === null || v === undefined) return null
-  const n = Number(String(v).replace(',', '.'))
-  return Number.isFinite(n) ? n : null
-}
+import { aNumero } from '../utils/numero.js'
 
 // Bloque 3: muestra los alimentos que detectó la IA a partir del ticket o
 // producto escaneado, y deja editarlos antes de guardarlos todos en la
@@ -27,7 +21,7 @@ export default function ConfirmarEscaneo() {
   const { agregarAlimento } = useApp()
 
   const detectados = location.state?.items || []
-  const supermercadoInicial = location.state?.supermercado || 'Mercadona'
+  const supermercadoInicial = location.state?.supermercado || SUPERMERCADO_POR_DEFECTO
 
   // No se valida contra una lista fija: la de supermercados es comunitaria y
   // vive en la base de datos. Si el detectado no está, SupermercadoSelector
