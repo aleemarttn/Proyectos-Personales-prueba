@@ -76,6 +76,7 @@ export default function SupermercadoSelector({ label = 'Supermercado', valor, on
             onChange={(e) => setNuevo(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && guardarNuevo()}
             placeholder="Ej. Hiperdino"
+            maxLength={60}
             className="flex-1 bg-white rounded-2xl px-4 py-3.5 text-gray-800 font-semibold shadow-card outline-none focus:ring-2 ring-brand-300 placeholder:text-gray-300 placeholder:font-normal"
           />
           <button
