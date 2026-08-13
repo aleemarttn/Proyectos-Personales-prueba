@@ -1,0 +1,30 @@
+-- ============================================================
+-- NutriGasto — Quitar a PUBLIC el EXECUTE sobre crear_perfil_nuevo_usuario
+--
+-- La migración 020 revocaba `from anon, authenticated`, pero el advisor
+-- seguía marcando la función como llamable por `anon` después de aplicarla.
+-- El motivo está en su ACL:
+--
+--   {=X/postgres, postgres=X/postgres, service_role=X/postgres}
+--
+-- El `=X` de la primera entrada (destinatario vacío) es el EXECUTE que
+-- PostgreSQL concede a PUBLIC por defecto sobre toda función nueva. `anon`
+-- y `authenticated` no lo tenían concedido directamente: lo heredaban de
+-- PUBLIC, así que revocárselo a ellos por nombre no cambiaba nada. Hay que
+-- nombrar a `public` explícitamente, como sí hacían la 019 (para
+-- `registrar_peticion_ia`) y la 015 (para las funciones de hogar) — que son
+-- justo las que sí quedaron cerradas.
+--
+-- Esta función es el cuerpo del trigger `on_auth_user_created`: nadie debe
+-- poder llamarla por RPC. Revocar EXECUTE no impide que el trigger dispare,
+-- porque PostgreSQL comprueba el permiso sobre la función del trigger al
+-- crearlo (CREATE TRIGGER), no cada vez que se ejecuta.
+--
+-- Verificación: los tests de tests/rls-idor.test.js dan de alta cuentas
+-- reales con signUp, así que si esto rompiera el alta de usuarios la suite
+-- fallaría en vez de descubrirse en producción.
+--
+-- Ejecutar en Supabase: panel -> SQL Editor -> New query -> pegar y RUN.
+-- ============================================================
+
+revoke all on function public.crear_perfil_nuevo_usuario() from public, anon, authenticated;
