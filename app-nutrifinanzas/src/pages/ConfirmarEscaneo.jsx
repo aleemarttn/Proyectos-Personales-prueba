@@ -111,32 +111,16 @@ export default function ConfirmarEscaneo() {
   }
 
   async function guardarUno(it) {
-    await agregarAlimento(
-      {
-        nombre: it.nombre.trim(),
-        marca: it.marca.trim() || null,
-        cantidad: it.cantidad || '1 ud',
-        kcal: it.kcal ?? 0,
-        proteinas: it.proteinas,
-        hidratos: it.hidratos,
-        grasas: it.grasas,
-        ...nutrientesDe(it),
-        precio: aNumero(it.precio) ?? 0,
-        supermercado,
-        categoria: it.categoria,
-        codigoBarras: it.codigoBarras,
-        pesoUnidadG: it.pesoUnidadG,
-        unidadNombre: it.unidadNombre.trim() || null,
-        unidadMedida: it.unidadMedida,
-      },
-      'escaner'
-    )
-
     // Si es un producto nuevo identificado por código de barras (no estaba
     // ya en el catálogo compartido) y tiene macros, lo sumamos al catálogo
-    // para que la próxima persona no tenga que escanearlo.
-    if (it.codigoBarras && !it.encontradoEnCatalogo && it.kcal != null) {
-      await guardarProductoEnCatalogo({
+    // ANTES de guardarlo en la despensa: `alimentos.codigo_barras` es una
+    // foreign key hacia `productos.codigo_barras` (migración 004), así que
+    // si el código no existe todavía en `productos`, el insert de abajo
+    // rompe la FK y falla con "No se pudo guardar" para cualquier producto
+    // que nadie haya escaneado antes en toda la comunidad.
+    let enCatalogo = it.encontradoEnCatalogo
+    if (it.codigoBarras && !enCatalogo && it.kcal != null) {
+      enCatalogo = await guardarProductoEnCatalogo({
         codigoBarras: it.codigoBarras,
         nombre: it.nombre.trim(),
         marca: it.marca.trim() || null,
@@ -151,6 +135,31 @@ export default function ConfirmarEscaneo() {
         unidadMedida: it.unidadMedida,
       })
     }
+
+    await agregarAlimento(
+      {
+        nombre: it.nombre.trim(),
+        marca: it.marca.trim() || null,
+        cantidad: it.cantidad || '1 ud',
+        kcal: it.kcal ?? 0,
+        proteinas: it.proteinas,
+        hidratos: it.hidratos,
+        grasas: it.grasas,
+        ...nutrientesDe(it),
+        precio: aNumero(it.precio) ?? 0,
+        supermercado,
+        categoria: it.categoria,
+        // Si el código de barras no llegó a quedar en el catálogo (fallo de
+        // red en el paso de arriba, o no tenía macros para contribuir), no
+        // lo mandamos: mejor guardar el alimento sin trazabilidad de código
+        // que romper la FK y perder el guardado entero.
+        codigoBarras: enCatalogo ? it.codigoBarras : null,
+        pesoUnidadG: it.pesoUnidadG,
+        unidadNombre: it.unidadNombre.trim() || null,
+        unidadMedida: it.unidadMedida,
+      },
+      'escaner'
+    )
   }
 
   // Guarda cada item por separado y, si alguno falla (red, RLS...), lo deja

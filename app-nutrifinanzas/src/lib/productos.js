@@ -66,7 +66,9 @@ export async function buscarProductosPorNombre(texto) {
 // en la app (nuevo producto, o macros añadidos/corregidos a uno existente
 // que se detectó por código de barras). No lanza si falla: contribuir al
 // catálogo compartido nunca debe bloquear el guardado en la despensa del
-// usuario.
+// usuario. Devuelve true/false para que quien vaya a referenciar ese código
+// de barras en otra tabla (p.ej. `alimentos`, que lo tiene como foreign key)
+// sepa si de verdad quedó creado.
 export async function guardarProductoEnCatalogo(producto) {
   try {
     const { error } = await supabase.from('productos').upsert(
@@ -88,7 +90,9 @@ export async function guardarProductoEnCatalogo(producto) {
       { onConflict: 'codigo_barras' }
     )
     if (error) throw error
+    return true
   } catch (e) {
     console.error('No se pudo guardar el producto en el catálogo compartido:', e)
+    return false
   }
 }
