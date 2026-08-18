@@ -28,14 +28,26 @@ export async function analizarNutricion(imagenBase64, mimeType = 'image/jpeg') {
   return data?.nutricion || null
 }
 
-// Analiza la foto de una carta de restaurante y devuelve los platos
-// detectados más la recomendación. `objetivoRestante` solo se manda en modo
-// completo (kcal/proteínas/hidratos/grasas que le quedan hoy al usuario); en
-// modo simple se omite y Gemini recomienda el plato objetivamente más sano.
-export async function analizarCarta(imagenBase64, mimeType = 'image/jpeg', objetivoRestante = null) {
-  const { data, error } = await supabase.functions.invoke('analizar-imagen', {
-    body: { imagenBase64, modo: 'carta', mimeType, objetivoRestante },
-  })
+// Analiza una carta de restaurante y devuelve los platos detectados más la
+// recomendación. La carta puede venir de tres formas (mutuamente
+// excluyentes, ver AnalizarCarta.jsx):
+//   - `paginas`: [{ dataUrl, mimeType }] — una o varias fotos, o un PDF.
+//   - `url`: el enlace del QR de la mesa (escaneado o pegado a mano).
+// `objetivoRestante` solo se manda en modo completo (kcal/proteínas/
+// hidratos/grasas que le quedan hoy al usuario); en modo simple se omite y
+// Gemini recomienda el plato objetivamente más sano.
+export async function analizarCarta({ paginas, url, objetivoRestante = null }) {
+  const body = { modo: 'carta', objetivoRestante }
+  if (paginas?.length) {
+    body.paginas = paginas.map((p) => ({
+      base64: p.dataUrl,
+      mimeType: p.mimeType,
+    }))
+  } else if (url) {
+    body.url = url
+  }
+
+  const { data, error } = await supabase.functions.invoke('analizar-imagen', { body })
 
   if (error) throw new Error(await mensajeErrorFuncion(error, 'No se pudo analizar la carta.'))
   if (data?.error) throw new Error(data.error)

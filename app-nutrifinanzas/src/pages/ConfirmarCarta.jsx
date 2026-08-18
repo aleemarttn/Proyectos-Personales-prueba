@@ -29,6 +29,7 @@ export default function ConfirmarCarta() {
   const recomendadoIndice = location.state?.recomendadoIndice ?? 0
   const motivo = location.state?.motivo || ''
   const conObjetivo = !!location.state?.conObjetivo
+  const procedencia = location.state?.procedencia || ''
 
   const modoCompleto = esCompleto(perfil?.tipo)
 
@@ -108,7 +109,10 @@ export default function ConfirmarCarta() {
         >
           <ArrowLeft size={20} />
         </button>
-        <h1 className="text-xl font-black text-gray-800">Carta analizada</h1>
+        <div className="min-w-0">
+          <h1 className="text-xl font-black text-gray-800">Carta analizada</h1>
+          {procedencia && <p className="text-xs text-gray-400 font-semibold">{procedencia}</p>}
+        </div>
       </div>
 
       <div className="px-5 pt-2 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
@@ -134,7 +138,7 @@ export default function ConfirmarCarta() {
         </p>
 
         <p className="text-sm font-bold text-gray-600 mb-2">
-          {platos.length === 1 ? 'Plato detectado' : `Platos detectados (${platos.length})`}
+          {platos.length === 1 ? 'Mejor opción para ti' : `Mejores opciones para ti (${platos.length})`}
         </p>
 
         <div className="space-y-2.5">
@@ -219,7 +223,10 @@ function PlatoCard({ plato, recomendado, seleccionado, seleccionable, onClick })
       } ${seleccionable ? 'active:scale-[0.98]' : ''}`}
     >
       <div className="flex items-start justify-between gap-2 mb-1">
-        <p className="font-bold text-gray-800">{plato.nombre}</p>
+        <div className="min-w-0">
+          <p className="font-bold text-gray-800">{plato.nombre}</p>
+          {plato.seccion && <p className="text-xs text-gray-400 font-semibold">{plato.seccion}</p>}
+        </div>
         {recomendado && (
           <span className="shrink-0 text-[11px] font-extrabold text-brand-600 bg-brand-50 px-2 py-1 rounded-lg">
             Recomendado

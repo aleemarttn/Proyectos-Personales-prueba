@@ -1,21 +1,46 @@
-// Edge Function: analiza una foto de ticket, de producto suelto o de la
-// TABLA DE INFORMACIÓN NUTRICIONAL de un producto con Gemini (tier gratuito)
-// y devuelve la info detectada en JSON.
+// Edge Function: analiza con Gemini (tier gratuito) una foto de ticket, de
+// producto suelto, de la TABLA DE INFORMACIÓN NUTRICIONAL de un producto, o
+// una CARTA DE RESTAURANTE, y devuelve la info detectada en JSON.
 // La clave GEMINI_API_KEY se lee como secreto de Supabase, nunca del frontend.
+//
+// El modo 'carta' admite tres formas de entrada porque una carta real casi
+// nunca cabe en una sola foto (ver PLAN-modo-restaurante.md):
+//   - `paginas`: hasta 6 fotos (carta de varias hojas) o un PDF subido.
+//   - `url`: el enlace del QR de la mesa. Lo descarga ESTA función, no el
+//     navegador — ver descargarCarta() para las protecciones anti-SSRF.
+//   - `imagenBase64`: una sola imagen. Se mantiene por compatibilidad: el
+//     service worker de la PWA cachea el bundle, así que hay clientes con el
+//     frontend viejo llamando a esta función.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest'
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')
 
-const MIME_TYPES_VALIDOS = ['image/jpeg', 'image/png', 'image/webp']
+const MIME_TYPES_IMAGEN = ['image/jpeg', 'image/png', 'image/webp']
+const MIME_PDF = 'application/pdf'
 
 // Base64 tiene ~4/3 del tamaño del binario original. 7,000,000 caracteres
-// son ~5,25 MB binarios: de sobra para una foto ya comprimida por
-// comprimirImagen() en el cliente (canvas.toDataURL con calidad reducida),
-// y suficiente para frenar un payload desproporcionado antes de gastar
-// tiempo/cuota de Gemini en él.
+// son ~5,25 MB binarios: de sobra para las fotos ya comprimidas por
+// comprimirImagen() en el cliente, y suficiente para frenar un payload
+// desproporcionado antes de gastar tiempo/cuota de Gemini en él. Ahora el
+// tope se aplica a la SUMA de todas las páginas, no a cada una.
 const MAX_BASE64_CHARS = 7_000_000
+const MAX_PAGINAS = 6
+
+// Límites de la descarga del enlace del QR.
+const MAX_BYTES_DESCARGA = 8 * 1024 * 1024
+const MS_TIMEOUT_DESCARGA = 8_000
+const MAX_REDIRECCIONES = 3
+const MAX_CHARS_TEXTO_WEB = 40_000
+// Por debajo de esto la web no trae carta legible: casi siempre es una SPA
+// que la pinta con JavaScript, y un fetch plano solo ve el HTML vacío.
+const MIN_CHARS_TEXTO_WEB = 200
+
+// Cuántos platos devolvemos como mucho. La pregunta del usuario es "¿qué
+// pido?", no "transcríbeme la carta": de una carta de 80 platos interesan
+// los que encajan, y una lista corta se lee de un vistazo en el móvil.
+const MAX_PLATOS = 10
 
 const CATEGORIAS_VALIDAS = [
   'Proteínas',
@@ -56,6 +81,13 @@ function corsHeaders(req: Request) {
   return headers
 }
 
+// Error cuyo mensaje está redactado para enseñárselo al usuario tal cual, a
+// diferencia de los errores internos, que se registran y se sustituyen por
+// uno genérico para no filtrar detalles del servidor.
+class ErrorCarta extends Error {}
+
+type Parte = { text: string } | { inline_data: { mime_type: string; data: string } }
+
 Deno.serve(async (req) => {
   const CORS_HEADERS = corsHeaders(req)
 
@@ -79,15 +111,29 @@ Deno.serve(async (req) => {
       return jsonError('No autorizado', 401, CORS_HEADERS)
     }
 
-    // Límite en base de datos (no solo en el frontend): 15/minuto y
-    // 100/día por usuario. Más generoso que generar-recetas porque un
-    // escaneo normal de la compra puede encadenar varias fotos seguidas
-    // (ticket + varios productos sueltos), pero sigue frenando un script
-    // que machaque el endpoint.
+    // El modo se valida ANTES del rate limit por dos motivos: una petición
+    // mal formada no debe gastarle cuota al usuario, y el límite que toca
+    // aplicar depende justo del modo (ver abajo).
+    const cuerpo = await req.json()
+    const { modo, imagenBase64, mimeType, objetivoRestante, paginas, url } = cuerpo ?? {}
+
+    if (!modo) {
+      return jsonError('Falta el modo.', 400, CORS_HEADERS)
+    }
+    if (modo !== 'ticket' && modo !== 'producto' && modo !== 'nutricion' && modo !== 'carta') {
+      return jsonError('modo debe ser "ticket", "producto", "nutricion" o "carta".', 400, CORS_HEADERS)
+    }
+
+    // Una llamada de carta puede ser 6 fotos, un PDF de veinte páginas y
+    // además una descarga saliente: pesa bastante más que escanear un
+    // producto, así que lleva su propio contador. registrar_peticion_ia
+    // recibe el nombre como parámetro (migración 011), o sea que separar el
+    // límite no necesita ninguna migración nueva.
+    const esCarta = modo === 'carta'
     const { data: permitido, error: limiteErr } = await supabase.rpc('registrar_peticion_ia', {
-      p_funcion: 'analizar-imagen',
-      p_limite_minuto: 15,
-      p_limite_dia: 100,
+      p_funcion: esCarta ? 'analizar-carta' : 'analizar-imagen',
+      p_limite_minuto: esCarta ? 6 : 15,
+      p_limite_dia: esCarta ? 40 : 100,
     })
     if (limiteErr) {
       console.error('Error comprobando el límite de peticiones:', limiteErr)
@@ -101,27 +147,35 @@ Deno.serve(async (req) => {
       return jsonError('El servidor no tiene configurada la clave de Gemini.', 500, CORS_HEADERS)
     }
 
-    const { modo, imagenBase64, mimeType, objetivoRestante } = await req.json()
-    if (!modo || !imagenBase64) {
-      return jsonError('Faltan datos: modo o imagenBase64.', 400, CORS_HEADERS)
-    }
-    if (modo !== 'ticket' && modo !== 'producto' && modo !== 'nutricion' && modo !== 'carta') {
-      return jsonError('modo debe ser "ticket", "producto", "nutricion" o "carta".', 400, CORS_HEADERS)
-    }
-    if (!MIME_TYPES_VALIDOS.includes(mimeType)) {
-      return jsonError('Formato de imagen no soportado. Usa JPEG, PNG o WebP.', 400, CORS_HEADERS)
-    }
-    if (imagenBase64.length > MAX_BASE64_CHARS) {
-      return jsonError('La imagen es demasiado grande.', 413, CORS_HEADERS)
+    let prompt: string
+    let partes: Parte[]
+
+    if (esCarta) {
+      partes = await construirPartesCarta({ paginas, url, imagenBase64, mimeType })
+      prompt = construirPromptCarta(objetivoRestante)
+    } else {
+      if (!imagenBase64) {
+        return jsonError('Faltan datos: imagenBase64.', 400, CORS_HEADERS)
+      }
+      if (!MIME_TYPES_IMAGEN.includes(mimeType)) {
+        return jsonError('Formato de imagen no soportado. Usa JPEG, PNG o WebP.', 400, CORS_HEADERS)
+      }
+      if (imagenBase64.length > MAX_BASE64_CHARS) {
+        return jsonError('La imagen es demasiado grande.', 413, CORS_HEADERS)
+      }
+      partes = [parteImagen(imagenBase64, mimeType)]
+      prompt = construirPrompt(modo)
     }
 
-    const prompt = modo === 'carta' ? construirPromptCarta(objetivoRestante) : construirPrompt(modo)
-    const resultado = await llamarGemini(prompt, imagenBase64, mimeType, modo)
+    const resultado = await llamarGemini(prompt, partes, modo)
 
     return new Response(JSON.stringify(resultado), {
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     })
   } catch (e) {
+    if (e instanceof ErrorCarta) {
+      return jsonError(e.message, 400, CORS_HEADERS)
+    }
     console.error('Error en analizar-imagen:', e)
     if (e instanceof Error && e.message === 'CUOTA_EXCEDIDA') {
       return jsonError(
@@ -140,6 +194,306 @@ function jsonError(mensaje: string, status: number, corsHeaders: Record<string, 
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
 }
+
+// El cliente manda dataURL ("data:image/jpeg;base64,...."); Gemini quiere
+// solo la carga útil.
+function parteImagen(base64: string, mimeType: string): Parte {
+  const limpio = base64.includes(',') ? base64.split(',')[1] : base64
+  return { inline_data: { mime_type: mimeType, data: limpio } }
+}
+
+// ============================================================
+// Entrada del modo carta
+// ============================================================
+
+async function construirPartesCarta(entrada: {
+  paginas: unknown
+  url: unknown
+  imagenBase64: unknown
+  mimeType: unknown
+}): Promise<Parte[]> {
+  const { paginas, url, imagenBase64, mimeType } = entrada
+
+  if (Array.isArray(paginas) && paginas.length > 0) {
+    if (url) throw new ErrorCarta('Manda fotos o un enlace, no las dos cosas.')
+    if (paginas.length > MAX_PAGINAS) {
+      throw new ErrorCarta(`Como mucho ${MAX_PAGINAS} páginas por carta.`)
+    }
+    let total = 0
+    const partes: Parte[] = []
+    for (const pagina of paginas) {
+      const base64 = typeof pagina?.base64 === 'string' ? pagina.base64 : ''
+      const tipo = typeof pagina?.mimeType === 'string' ? pagina.mimeType : ''
+      if (!base64) throw new ErrorCarta('Una de las páginas ha llegado vacía.')
+      if (!MIME_TYPES_IMAGEN.includes(tipo) && tipo !== MIME_PDF) {
+        throw new ErrorCarta('Formato no soportado. Usa fotos JPEG/PNG/WebP o un PDF.')
+      }
+      total += base64.length
+      if (total > MAX_BASE64_CHARS) {
+        throw new ErrorCarta('Las páginas pesan demasiado juntas. Prueba con menos fotos.')
+      }
+      partes.push(parteImagen(base64, tipo))
+    }
+    return partes
+  }
+
+  if (typeof url === 'string' && url.trim()) {
+    return [await descargarCarta(url.trim())]
+  }
+
+  // Compatibilidad con el frontend anterior (una sola imagen).
+  if (typeof imagenBase64 === 'string' && imagenBase64) {
+    if (!MIME_TYPES_IMAGEN.includes(mimeType as string)) {
+      throw new ErrorCarta('Formato de imagen no soportado. Usa JPEG, PNG o WebP.')
+    }
+    if (imagenBase64.length > MAX_BASE64_CHARS) {
+      throw new ErrorCarta('La imagen es demasiado grande.')
+    }
+    return [parteImagen(imagenBase64, mimeType as string)]
+  }
+
+  throw new ErrorCarta('Faltan datos: manda las fotos de la carta o el enlace del QR.')
+}
+
+// ============================================================
+// Descarga del enlace del QR (SSRF)
+// ============================================================
+//
+// Aquí el servidor pide una URL que ha elegido el usuario, así que hay que
+// tratarla como hostil: sin filtro valdría para sondear la red interna de la
+// infraestructura o los endpoints de metadatos del proveedor.
+//
+// Defensas, en este orden: esquema http/https, hostname no reservado, TODAS
+// las IPs que resuelve el DNS fuera de rangos privados, redirecciones
+// seguidas a mano revalidando cada salto, timeout y tope de tamaño. Además,
+// el cuerpo descargado NUNCA se devuelve al cliente: solo sale el JSON de
+// platos que produce Gemini, lo que limita mucho lo que se podría exfiltrar.
+//
+// Límite conocido: entre resolver el DNS y hacer el fetch hay una ventana
+// teórica de DNS rebinding. Cerrarla exigiría conectar por IP poniendo el
+// Host a mano, lo que rompe SNI/TLS. Con los rangos privados bloqueados y el
+// cuerpo sin devolver, el riesgo residual es asumible para esta app.
+
+const HOSTS_PROHIBIDOS = ['localhost', 'metadata', 'metadata.google.internal']
+
+function esIpv4Reservada(ip: string) {
+  const partes = ip.split('.').map(Number)
+  if (partes.length !== 4 || partes.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) {
+    return true // si no sabemos interpretarla, no la abrimos
+  }
+  const [a, b] = partes
+  if (a === 0 || a === 10 || a === 127) return true      // "este host", privada, loopback
+  if (a === 169 && b === 254) return true                // link-local (metadatos de la nube)
+  if (a === 172 && b >= 16 && b <= 31) return true       // privada
+  if (a === 192 && b === 168) return true                // privada
+  if (a === 192 && b === 0) return true                  // 192.0.0.0/24, reservada IETF
+  if (a === 100 && b >= 64 && b <= 127) return true      // CGNAT
+  if (a >= 224) return true                              // multicast y reservadas
+  return false
+}
+
+function esIpv6Reservada(ip: string) {
+  const x = ip.toLowerCase().split('%')[0]
+  if (x === '::1' || x === '::') return true                      // loopback / no especificada
+  if (x.startsWith('::ffff:')) return esIpv4Reservada(x.slice(7)) // IPv4 mapeada
+  if (/^f[cd]/.test(x)) return true                               // unique local fc00::/7
+  if (/^fe[89ab]/.test(x)) return true                            // link-local fe80::/10
+  return false
+}
+
+async function validarUrl(bruta: string): Promise<URL> {
+  let url: URL
+  try {
+    url = new URL(bruta)
+  } catch {
+    throw new ErrorCarta('Ese enlace no es válido.')
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new ErrorCarta('Solo podemos abrir enlaces que empiecen por http o https.')
+  }
+
+  const host = url.hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '')
+  if (HOSTS_PROHIBIDOS.includes(host) || host.endsWith('.local') || host.endsWith('.internal')) {
+    throw new ErrorCarta('Ese enlace apunta a una dirección interna y no podemos abrirlo.')
+  }
+
+  const esLiteralV4 = /^\d{1,3}(\.\d{1,3}){3}$/.test(host)
+  const esLiteralV6 = host.includes(':')
+  if (esLiteralV4 || esLiteralV6) {
+    const reservada = esLiteralV6 ? esIpv6Reservada(host) : esIpv4Reservada(host)
+    if (reservada) {
+      throw new ErrorCarta('Ese enlace apunta a una dirección interna y no podemos abrirlo.')
+    }
+    return url
+  }
+
+  const ips: string[] = []
+  for (const tipo of ['A', 'AAAA'] as const) {
+    try {
+      ips.push(...(await Deno.resolveDns(host, tipo)))
+    } catch {
+      // Es normal no tener registros de uno de los dos tipos.
+    }
+  }
+  if (ips.length === 0) {
+    throw new ErrorCarta('No hemos podido encontrar esa web. Comprueba el enlace.')
+  }
+  for (const ip of ips) {
+    const reservada = ip.includes(':') ? esIpv6Reservada(ip) : esIpv4Reservada(ip)
+    if (reservada) {
+      throw new ErrorCarta('Ese enlace apunta a una dirección interna y no podemos abrirlo.')
+    }
+  }
+  return url
+}
+
+async function leerConTope(res: Response): Promise<Uint8Array> {
+  const lector = res.body?.getReader()
+  if (!lector) return new Uint8Array()
+  const trozos: Uint8Array[] = []
+  let total = 0
+  while (true) {
+    const { done, value } = await lector.read()
+    if (done) break
+    total += value.length
+    if (total > MAX_BYTES_DESCARGA) {
+      await lector.cancel()
+      throw new ErrorCarta('La carta de ese enlace pesa demasiado para analizarla.')
+    }
+    trozos.push(value)
+  }
+  const salida = new Uint8Array(total)
+  let pos = 0
+  for (const t of trozos) {
+    salida.set(t, pos)
+    pos += t.length
+  }
+  return salida
+}
+
+// btoa() necesita una cadena binaria, y String.fromCharCode(...bytes) revienta
+// la pila con arrays de megabytes: se convierte por trozos.
+function aBase64(bytes: Uint8Array) {
+  const TROZO = 0x8000
+  let binario = ''
+  for (let i = 0; i < bytes.length; i += TROZO) {
+    binario += String.fromCharCode(...bytes.subarray(i, i + TROZO))
+  }
+  return btoa(binario)
+}
+
+async function descargarCarta(urlBruta: string): Promise<Parte> {
+  let actual = urlBruta
+
+  for (let salto = 0; salto <= MAX_REDIRECCIONES; salto++) {
+    const url = await validarUrl(actual)
+
+    let res: Response
+    try {
+      res = await fetch(url, {
+        redirect: 'manual', // cada salto se revalida a mano; si no, el filtro se esquiva
+        signal: AbortSignal.timeout(MS_TIMEOUT_DESCARGA),
+        headers: {
+          'User-Agent': 'NutriGasto/1.0 (lector de cartas de restaurante)',
+          Accept: 'text/html,application/pdf,image/*;q=0.9,*/*;q=0.5',
+        },
+      })
+    } catch (e) {
+      console.error('Error descargando la carta:', e)
+      throw new ErrorCarta('No hemos podido abrir ese enlace. Puede que la web tarde demasiado o esté caída.')
+    }
+
+    if (res.status >= 300 && res.status < 400) {
+      const destino = res.headers.get('Location')
+      await res.body?.cancel()
+      if (!destino) throw new ErrorCarta('Ese enlace redirige a un sitio que no podemos abrir.')
+      actual = new URL(destino, url).toString()
+      continue
+    }
+
+    if (!res.ok) {
+      await res.body?.cancel()
+      throw new ErrorCarta(`La web de la carta no responde correctamente (error ${res.status}).`)
+    }
+
+    const tipo = (res.headers.get('Content-Type') || '').toLowerCase()
+    const bytes = await leerConTope(res)
+
+    if (tipo.includes('application/pdf')) {
+      return { inline_data: { mime_type: MIME_PDF, data: aBase64(bytes) } }
+    }
+    if (tipo.startsWith('image/')) {
+      const limpio = tipo.split(';')[0].trim()
+      if (!MIME_TYPES_IMAGEN.includes(limpio)) {
+        throw new ErrorCarta('Ese enlace es una imagen en un formato que no sabemos leer.')
+      }
+      return { inline_data: { mime_type: limpio, data: aBase64(bytes) } }
+    }
+    if (!tipo || tipo.includes('html') || tipo.includes('text/') || tipo.includes('xml')) {
+      const texto = htmlATexto(new TextDecoder('utf-8').decode(bytes))
+      if (texto.length < MIN_CHARS_TEXTO_WEB) {
+        throw new ErrorCarta(
+          'Esa web carga la carta con JavaScript y no podemos leerla. Haz capturas de pantalla de la carta y súbelas como fotos.'
+        )
+      }
+      return {
+        text: `TEXTO DE LA CARTA (extraído de ${url.hostname}):\n\n${texto.slice(0, MAX_CHARS_TEXTO_WEB)}`,
+      }
+    }
+
+    throw new ErrorCarta('Ese enlace no lleva a una carta que podamos leer (ni web, ni PDF, ni imagen).')
+  }
+
+  throw new ErrorCarta('Ese enlace da demasiadas redirecciones.')
+}
+
+const ENTIDADES: Record<string, string> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+  ndash: '–',
+  mdash: '—',
+  hellip: '…',
+  euro: '€',
+}
+
+// Extracción de texto suficiente para una carta: no pretende ser un parser de
+// HTML, solo dejar legibles los nombres de los platos y sus descripciones.
+function htmlATexto(html: string) {
+  let t = html
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<(script|style|noscript|svg)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|tr|h[1-6]|section|article|td)\s*>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+
+  t = t
+    .replace(/&#(\d+);/g, (_, n) => codigoATexto(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => codigoATexto(parseInt(n, 16)))
+    .replace(/&([a-z]+);/gi, (coincidencia, e) => ENTIDADES[e.toLowerCase()] ?? coincidencia)
+
+  return t
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/\s*\n\s*/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function codigoATexto(codigo: number) {
+  if (!Number.isFinite(codigo) || codigo < 0 || codigo > 0x10ffff) return ' '
+  try {
+    return String.fromCodePoint(codigo)
+  } catch {
+    return ' '
+  }
+}
+
+// ============================================================
+// Prompts
+// ============================================================
 
 function construirPrompt(modo: 'ticket' | 'producto' | 'nutricion') {
   const listaCategorias = CATEGORIAS_VALIDAS.join(', ')
@@ -210,9 +564,12 @@ Responde ÚNICAMENTE con el JSON, nada más.`
 }
 
 function construirPromptCarta(objetivoRestante: unknown) {
-  const base = `Eres un asistente que analiza fotos de cartas de restaurante.
-Identifica los platos legibles y estima sus macros aproximados a partir del nombre/
-descripción y del conocimiento general de cocina española/internacional.
+  const base = `Eres un asistente que ayuda a alguien a decidir QUÉ PEDIR en un restaurante.
+Recibes su carta COMPLETA, que puede venir como varias fotos de páginas distintas, como un
+PDF de varias páginas o como el texto de la web del restaurante.
+
+Léela entera y estima los macros aproximados de cada plato a partir del nombre/descripción y
+del conocimiento general de cocina española e internacional.
 
 Devuelve SOLO un JSON (sin markdown, sin texto adicional) con esta forma exacta:
 
@@ -220,6 +577,7 @@ Devuelve SOLO un JSON (sin markdown, sin texto adicional) con esta forma exacta:
   "platos": [
     {
       "nombre": "...",
+      "seccion": "sección de la carta donde está (Entrantes, Ensaladas, Carnes, Postres...), o null",
       "kcal_estimado": numero_o_null,
       "proteinas_estimado": numero_o_null,
       "hidratos_estimado": numero_o_null,
@@ -234,37 +592,41 @@ Devuelve SOLO un JSON (sin markdown, sin texto adicional) con esta forma exacta:
   const instrucciones =
     objetivoRestante && typeof objetivoRestante === 'object'
       ? `Al usuario le queda hoy este margen: ${JSON.stringify(objetivoRestante)} (kcal y gramos de
-proteína/hidratos/grasa). La recomendación debe priorizar el plato que mejor encaje en ese
-margen (sin pasarse de kcal, priorizando proteína si sobra margen).`
-      : `Recomienda el plato objetivamente más saludable (más proteína/verdura, menos frito/
-procesado, ración razonable).`
+proteína/hidratos/grasa). Ordena los platos del que MEJOR encaja en ese margen al que peor
+(sin pasarse de kcal, priorizando proteína si sobra margen), y recomienda el primero.`
+      : `Ordena los platos del objetivamente MÁS saludable al menos (más proteína/verdura, menos
+frito/procesado, ración razonable) y recomienda el primero.`
 
   return `${base}
 
 ${instrucciones}
-Dejar "confianza": "baja" en platos con descripción muy ambigua — no inventar datos.
+
+Reglas IMPORTANTES:
+- NO transcribas la carta entera. Devuelve como mucho ${MAX_PLATOS} platos: solo los mejores
+  candidatos, ya ordenados de mejor a peor. El resto de la carta ignóralo.
+- Incluye únicamente platos que se puedan pedir de comer. Nada de bebidas, vinos, cafés,
+  guarniciones sueltas ni menús sin desglosar.
+- Las páginas pueden solaparse o repetirse: si un plato aparece dos veces, inclúyelo UNA sola vez.
+- Deja "confianza": "baja" en platos con descripción muy ambigua — no inventes datos.
+- "recomendado_indice" es la posición (empezando en 0) del plato recomendado dentro de "platos".
 Responde ÚNICAMENTE con el JSON, nada más.`
 }
 
+// ============================================================
+// Llamada a Gemini
+// ============================================================
+
 async function llamarGemini(
   prompt: string,
-  imagenBase64: string,
-  mimeType: string,
+  partes: Parte[],
   modo: 'ticket' | 'producto' | 'nutricion' | 'carta',
 ) {
-  const base64Limpio = imagenBase64.includes(',')
-    ? imagenBase64.split(',')[1]
-    : imagenBase64
-
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`
 
   const body = JSON.stringify({
     contents: [
       {
-        parts: [
-          { text: prompt },
-          { inline_data: { mime_type: mimeType, data: base64Limpio } },
-        ],
+        parts: [{ text: prompt }, ...partes],
       },
     ],
     generationConfig: {
@@ -377,10 +739,12 @@ function normalizarCarta(json: any) {
   platosBrutos.forEach((p: any, indiceOriginal: number) => {
     const nombre = String(p?.nombre || '').trim()
     if (!nombre) return
+    const seccion = String(p?.seccion || '').trim()
     validos.push({
       indiceOriginal,
       plato: {
         nombre,
+        seccion: seccion || null,
         kcalEstimado: num(p?.kcal_estimado),
         proteinasEstimado: num(p?.proteinas_estimado),
         hidratosEstimado: num(p?.hidratos_estimado),
@@ -390,13 +754,28 @@ function normalizarCarta(json: any) {
     })
   })
 
-  const platos = validos.map((v) => v.plato)
   const indiceBruto = Number.isInteger(json?.recomendado_indice) ? json.recomendado_indice : 0
-  const recomendadoIndice = validos.findIndex((v) => v.indiceOriginal === indiceBruto)
+  let recomendadoIndice = validos.findIndex((v) => v.indiceOriginal === indiceBruto)
+  if (recomendadoIndice < 0) recomendadoIndice = 0
+
+  // El tope de platos también se aplica aquí: el prompt lo pide, pero el
+  // modelo no siempre obedece y la pantalla del móvil no aguanta una carta
+  // entera. Si el recomendado se saliera del recorte se trae al principio,
+  // en vez de perderlo.
+  let recortados = validos
+  if (validos.length > MAX_PLATOS) {
+    if (recomendadoIndice >= MAX_PLATOS) {
+      const recomendado = validos[recomendadoIndice]
+      recortados = [recomendado, ...validos.filter((_, i) => i !== recomendadoIndice)].slice(0, MAX_PLATOS)
+      recomendadoIndice = 0
+    } else {
+      recortados = validos.slice(0, MAX_PLATOS)
+    }
+  }
 
   return {
-    platos,
-    recomendadoIndice: recomendadoIndice >= 0 ? recomendadoIndice : 0,
+    platos: recortados.map((v) => v.plato),
+    recomendadoIndice,
     motivo: typeof json?.motivo === 'string' ? json.motivo.trim() : '',
   }
 }

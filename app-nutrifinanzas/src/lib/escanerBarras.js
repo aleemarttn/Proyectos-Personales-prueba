@@ -1,4 +1,13 @@
-// Motor de lectura de códigos de barras en vivo.
+// Motor de lectura de códigos en vivo con la cámara: códigos de BARRAS de
+// producto (EAN/UPC) y códigos QR (el de la carta en la mesa del
+// restaurante, ver AnalizarCarta.jsx).
+//
+// Los dos casos comparten todo lo caro de resolver — pedir la cámara
+// trasera, enfoque continuo, esperar a que el vídeo tenga dimensiones
+// reales en iOS, la linterna, el bucle de intentos — y se diferencian solo
+// en cuatro cosas, que viven en PERFILES: qué lector usar, qué formatos
+// pedirle al detector nativo, qué trozo del fotograma recortar y cuántas
+// lecturas iguales exigimos antes de dar el código por bueno.
 //
 // Antes esto era una llamada a `decodeFromConstraints` de @zxing/browser con
 // los ajustes por defecto, y era LENTO por cuatro motivos que aquí se
@@ -21,39 +30,60 @@
 // rápida que decodificar en JavaScript. Safari/iOS no la tiene todavía, así
 // que ahí corre la ruta ZXing afinada.
 
-import { BrowserMultiFormatOneDReader } from '@zxing/browser'
+import { BrowserMultiFormatOneDReader, BrowserQRCodeReader } from '@zxing/browser'
 import { BarcodeFormat, DecodeHintType } from '@zxing/library'
-
-const FORMATOS_ZXING = [
-  BarcodeFormat.EAN_13,
-  BarcodeFormat.EAN_8,
-  BarcodeFormat.UPC_A,
-  BarcodeFormat.UPC_E,
-]
-
-// Los mismos formatos, con los nombres que usa la API nativa BarcodeDetector.
-const FORMATOS_NATIVOS = ['ean_13', 'ean_8', 'upc_a', 'upc_e']
 
 // Cada cuánto intentamos decodificar un fotograma. 60 ms ≈ 16 intentos/s:
 // suficiente para que se sienta instantáneo sin freír la CPU del móvil.
 const MS_ENTRE_INTENTOS = 60
 
-// Banda central del fotograma que se decodifica, en proporción sobre el
-// total. Un código de barras es ancho y bajo, así que cogemos casi todo el
-// ancho y poca altura. Coincide con el recuadro guía que ve el usuario.
-const RECORTE = { ancho: 0.92, alto: 0.42 }
+export const PERFILES = {
+  barras: {
+    formatosZxing: [
+      BarcodeFormat.EAN_13,
+      BarcodeFormat.EAN_8,
+      BarcodeFormat.UPC_A,
+      BarcodeFormat.UPC_E,
+    ],
+    // Los mismos formatos, con los nombres de la API nativa BarcodeDetector.
+    formatosNativos: ['ean_13', 'ean_8', 'upc_a', 'upc_e'],
+    // Banda central del fotograma que se decodifica, en proporción sobre el
+    // total. Un código de barras es ancho y bajo, así que cogemos casi todo
+    // el ancho y poca altura. Coincide con el recuadro guía que ve el usuario.
+    recorte: { ancho: 0.92, alto: 0.42 },
+    // Un EAN-13 mal leído es raro (lleva dígito de control), pero un EAN-8 o
+    // un UPC-E sí se cuelan de vez en cuando. Exigimos leer el mismo código
+    // dos veces seguidas antes de darlo por bueno: al ritmo de arriba cuesta
+    // ~60 ms y elimina prácticamente los falsos positivos.
+    lecturasParaConfirmar: 2,
+    crearLector: (hints) =>
+      new BrowserMultiFormatOneDReader(hints, {
+        delayBetweenScanAttempts: MS_ENTRE_INTENTOS,
+        delayBetweenScanSuccess: MS_ENTRE_INTENTOS,
+      }),
+  },
+  qr: {
+    formatosZxing: [BarcodeFormat.QR_CODE],
+    formatosNativos: ['qr_code'],
+    // Un QR es cuadrado y el usuario lo encuadra entero, así que aquí el
+    // recorte es un cuadrado amplio en vez de una banda.
+    recorte: { ancho: 0.8, alto: 0.8 },
+    // El QR lleva corrección de errores Reed-Solomon: si decodifica, es
+    // correcto. Confirmar dos veces solo añadiría latencia.
+    lecturasParaConfirmar: 1,
+    crearLector: (hints) =>
+      new BrowserQRCodeReader(hints, {
+        delayBetweenScanAttempts: MS_ENTRE_INTENTOS,
+        delayBetweenScanSuccess: MS_ENTRE_INTENTOS,
+      }),
+  },
+}
 
-// Un EAN-13 mal leído es raro (lleva dígito de control), pero un EAN-8 o un
-// UPC-E sí se cuelan de vez en cuando. Exigimos leer el mismo código dos
-// veces seguidas antes de darlo por bueno: al ritmo de arriba cuesta ~60 ms
-// y elimina prácticamente los falsos positivos.
-const LECTURAS_PARA_CONFIRMAR = 2
-
-async function hayDetectorNativo() {
+async function hayDetectorNativo(formatosNativos) {
   if (typeof window === 'undefined' || !('BarcodeDetector' in window)) return false
   try {
     const soportados = await window.BarcodeDetector.getSupportedFormats()
-    return FORMATOS_NATIVOS.some((f) => soportados.includes(f))
+    return formatosNativos.some((f) => soportados.includes(f))
   } catch {
     return false
   }
@@ -119,9 +149,11 @@ function esperarVideoListo(video) {
  * @param {HTMLVideoElement} video
  * @param {(codigo: string) => void} onDetectado  se llama UNA vez y el escáner se detiene solo
  * @param {(error: Error) => void} onError
+ * @param {'barras' | 'qr'} tipo  qué se está buscando (ver PERFILES)
  * @returns {Promise<{detener: () => void, tieneLinterna: boolean, alternarLinterna: (on: boolean) => Promise<void>}>}
  */
-export async function iniciarEscaner(video, onDetectado, onError) {
+export async function iniciarEscaner(video, onDetectado, onError, tipo = 'barras') {
+  const perfil = PERFILES[tipo] || PERFILES.barras
   let activo = true
   let temporizador = null
   let stream = null
@@ -148,23 +180,20 @@ export async function iniciarEscaner(video, onDetectado, onError) {
     await video.play()
     await esperarVideoListo(video)
 
-    const usarNativo = await hayDetectorNativo()
+    const usarNativo = await hayDetectorNativo(perfil.formatosNativos)
     const detector = usarNativo
-      ? new window.BarcodeDetector({ formats: FORMATOS_NATIVOS })
+      ? new window.BarcodeDetector({ formats: perfil.formatosNativos })
       : null
 
     let lector = null
     if (!usarNativo) {
       const hints = new Map()
-      hints.set(DecodeHintType.POSSIBLE_FORMATS, FORMATOS_ZXING)
-      // TRY_HARDER hace que el lector 1D pruebe más líneas del fotograma.
-      // Cuesta unos milisegundos más por intento pero acierta bastante
-      // antes cuando el código está algo torcido.
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, perfil.formatosZxing)
+      // TRY_HARDER hace que el lector pruebe más líneas/orientaciones del
+      // fotograma. Cuesta unos milisegundos más por intento pero acierta
+      // bastante antes cuando el código está algo torcido.
       hints.set(DecodeHintType.TRY_HARDER, true)
-      lector = new BrowserMultiFormatOneDReader(hints, {
-        delayBetweenScanAttempts: MS_ENTRE_INTENTOS,
-        delayBetweenScanSuccess: MS_ENTRE_INTENTOS,
-      })
+      lector = perfil.crearLector(hints)
     }
 
     // Canvas fuera de pantalla donde recortamos la banda central.
@@ -182,14 +211,14 @@ export async function iniciarEscaner(video, onDetectado, onError) {
         ultimoCodigo = codigo
         repeticiones = 1
       }
-      return repeticiones >= LECTURAS_PARA_CONFIRMAR
+      return repeticiones >= perfil.lecturasParaConfirmar
     }
 
     const intentar = async () => {
       if (!activo) return
 
-      const anchoRecorte = Math.round(video.videoWidth * RECORTE.ancho)
-      const altoRecorte = Math.round(video.videoHeight * RECORTE.alto)
+      const anchoRecorte = Math.round(video.videoWidth * perfil.recorte.ancho)
+      const altoRecorte = Math.round(video.videoHeight * perfil.recorte.alto)
       if (anchoRecorte > 0 && altoRecorte > 0) {
         if (canvas.width !== anchoRecorte || canvas.height !== altoRecorte) {
           canvas.width = anchoRecorte

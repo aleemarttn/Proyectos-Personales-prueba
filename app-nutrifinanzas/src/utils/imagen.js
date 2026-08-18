@@ -34,3 +34,15 @@ export function comprimirImagen(archivo, maxDim = 1600, calidad = 0.82) {
     lector.readAsDataURL(archivo)
   })
 }
+
+// Lee un archivo tal cual, en base64, sin pasarlo por canvas. Para la carta
+// de restaurante en PDF (AnalizarCarta.jsx): comprimirImagen() destruiría un
+// PDF (un canvas solo sabe pintar imágenes), así que un PDF va directo.
+export function leerArchivoBase64(archivo) {
+  return new Promise((resolve, reject) => {
+    const lector = new FileReader()
+    lector.onerror = () => reject(new Error('No se pudo leer el archivo.'))
+    lector.onload = () => resolve({ dataUrl: lector.result, mimeType: archivo.type })
+    lector.readAsDataURL(archivo)
+  })
+}
