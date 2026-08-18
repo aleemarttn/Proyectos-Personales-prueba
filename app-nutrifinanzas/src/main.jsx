@@ -5,7 +5,12 @@ import App from './App.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { AppProvider } from './context/AppContext.jsx'
 import { DiarioProvider } from './context/DiarioContext.jsx'
+import { iniciarArregloViewportIOS } from './lib/viewportIOS.js'
 import './index.css'
+
+// Solo hace algo en iOS instalado (ver el porqué en viewportIOS.js); en
+// cualquier otra plataforma es una comprobación y ya.
+iniciarArregloViewportIOS()
 
 // Cada pantalla (Despensa, Diario, Escanear...) se descarga como un trozo de
 // JS aparte, con un nombre que lleva un hash. Justo después de publicar una

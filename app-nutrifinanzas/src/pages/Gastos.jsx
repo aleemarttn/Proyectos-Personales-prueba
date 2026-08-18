@@ -147,27 +147,40 @@ export default function Gastos() {
         )}
       </Seccion>
 
-      {/* Barras: gasto por supermercado */}
+      {/* Barras: gasto por supermercado. Con más de 5-6 supermercados,
+          Recharts oculta en silencio las etiquetas que no le caben en el
+          ancho disponible (interval="auto" por defecto) — así se perdían
+          nombres como "Mercadona" o "Carrefour" sin avisar. Se fuerza a
+          mostrarlas TODAS (interval={0}) y, para que quepan sin solaparse,
+          el gráfico se ensancha según cuántos haya y se hace desplazable
+          en horizontal en vez de recortar texto — mismo gesto de "desliza
+          para ver más" que ya usan la tira de días y las pestañas. */}
       <Seccion titulo="Gasto por supermercado">
         {porSuper.length === 0 ? (
           <Vacio />
         ) : (
-          <div className="h-44">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={porSuper} margin={{ top: 10, bottom: 0 }}>
-                <XAxis
-                  dataKey="nombre"
-                  tick={{ fontSize: 11, fontWeight: 700, fill: '#9ca3af' }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip
-                  formatter={(v) => euros(v)}
-                  cursor={{ fill: '#16a34a11' }}
-                />
-                <Bar dataKey="valor" radius={[8, 8, 0, 0]} fill="#22c55e" />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="h-44 -mx-1 overflow-x-auto no-scrollbar">
+            <div
+              className="h-full px-1"
+              style={{ minWidth: porSuper.length > 5 ? `${porSuper.length * 72}px` : '100%' }}
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={porSuper} margin={{ top: 10, bottom: 0 }}>
+                  <XAxis
+                    dataKey="nombre"
+                    interval={0}
+                    tick={{ fontSize: 11, fontWeight: 700, fill: '#9ca3af' }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    formatter={(v) => euros(v)}
+                    cursor={{ fill: '#16a34a11' }}
+                  />
+                  <Bar dataKey="valor" radius={[8, 8, 0, 0]} fill="#22c55e" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         )}
       </Seccion>

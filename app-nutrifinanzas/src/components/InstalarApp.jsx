@@ -1,19 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Download, X, Share, WifiOff } from 'lucide-react'
+import { esIOS, appInstalada } from '../lib/dispositivo.js'
 
 const CLAVE_DESCARTADO = 'nutrigasto_instalar_descartado'
-
-// ¿La app ya se está usando instalada (no dentro del navegador)?
-function estaInstalada() {
-  return (
-    window.matchMedia('(display-mode: standalone)').matches ||
-    window.navigator.standalone === true
-  )
-}
-
-function esIOS() {
-  return /iphone|ipad|ipod/i.test(window.navigator.userAgent)
-}
 
 // Banner para instalar la app en el móvil + aviso de falta de conexión.
 // Si debajo no hay barra de navegación, el aviso respeta la zona de gestos.
@@ -24,7 +13,7 @@ export default function InstalarApp({ conBarra = false }) {
 
   useEffect(() => {
     const descartado = localStorage.getItem(CLAVE_DESCARTADO) === '1'
-    if (descartado || estaInstalada()) return
+    if (descartado || appInstalada()) return
 
     // Android / Chrome de escritorio: el navegador nos cede el momento de pedirlo
     function alPoderInstalar(e) {
