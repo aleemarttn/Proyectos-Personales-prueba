@@ -19,7 +19,8 @@ const AppContext = createContext(null)
 
 // Convierte una fila de la tabla `alimentos` al formato que usan las
 // pantallas (camelCase, precio numérico -> Supabase devuelve numeric como string).
-function filaAAlimento(fila) {
+// Exportada para que lib/gastos.js reuse el mismo mapeo en vez de duplicarlo.
+export function filaAAlimento(fila) {
   return {
     id: fila.id,
     // Quién lo compró. Con despensa compartida ya no es siempre "yo", y es
@@ -58,6 +59,10 @@ async function leerAlimentos() {
   const { data, error } = await supabase
     .from('alimentos')
     .select('*')
+    // Solo lo que sigue activo: lo que ya se consumió/tiró (eliminado_en no
+    // nulo) no debe aparecer en la despensa, aunque el registro se conserve
+    // para el historial de gasto (ver lib/gastos.js y migración 024).
+    .is('eliminado_en', null)
     .order('fecha', { ascending: false })
     .order('created_at', { ascending: false })
 
@@ -197,6 +202,7 @@ export function AppProvider({ children }) {
       .update({ hogar_id: hogarId })
       .eq('usuario_id', sesion.user.id)
       .is('hogar_id', null)
+      .is('eliminado_en', null)
       .select()
 
     if (err) throw err
@@ -207,8 +213,15 @@ export function AppProvider({ children }) {
     return actualizados.length
   }
 
+  // Borrado lógico, no DELETE: el precio de lo que se come o se tira debe
+  // seguir contando en el historial de gasto por mes (lib/gastos.js). La
+  // despensa en vivo no lo vuelve a ver porque leerAlimentos() ya filtra
+  // eliminado_en is null; desde la UI se sigue viendo como un borrado normal.
   async function eliminarAlimento(id) {
-    const { error: err } = await supabase.from('alimentos').delete().eq('id', id)
+    const { error: err } = await supabase
+      .from('alimentos')
+      .update({ eliminado_en: new Date().toISOString() })
+      .eq('id', id)
     if (err) throw err
     setAlimentos((prev) => prev.filter((a) => a.id !== id))
   }

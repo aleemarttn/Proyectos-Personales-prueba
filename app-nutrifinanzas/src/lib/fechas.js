@@ -86,3 +86,48 @@ export function fechaLarga(iso) {
     ...(mismoAnio ? {} : { year: 'numeric' }),
   })
 }
+
+// --- Meses (para Gastos: navegación e historial por mes) ---
+//
+// Un "mes" se representa como el primer día de ese mes en 'YYYY-MM-DD'
+// (ej. '2026-08-01'), igual que `fecha` representa un día: así el orden
+// alfabético sigue coincidiendo con el cronológico y se puede seguir
+// comparando con `<`/`>` sin crear objetos Date.
+
+export function mesDe(iso) {
+  return iso.slice(0, 8) + '01'
+}
+
+export function mesActualISO() {
+  return mesDe(hoyISO())
+}
+
+export function sumarMeses(mesISO, n) {
+  const [anio, mes] = mesISO.split('-').map(Number)
+  return aISO(new Date(anio, mes - 1 + n, 1))
+}
+
+export function esMesActual(mesISO) {
+  return mesISO === mesActualISO()
+}
+
+export function esMesFuturo(mesISO) {
+  return mesISO > mesActualISO()
+}
+
+// "agosto 2026" (sin año si es el actual, con año si no — igual que fechaLarga)
+export function nombreMes(mesISO) {
+  const fecha = desdeISO(mesISO)
+  const mismoAnio = fecha.getFullYear() === new Date().getFullYear()
+  const nombre = fecha.toLocaleDateString('es-ES', {
+    month: 'long',
+    ...(mismoAnio ? {} : { year: 'numeric' }),
+  })
+  return nombre.charAt(0).toUpperCase() + nombre.slice(1)
+}
+
+// "ago" — para las etiquetas del gráfico de tendencia, donde no cabe el nombre entero.
+export function nombreMesCorto(mesISO) {
+  const nombre = desdeISO(mesISO).toLocaleDateString('es-ES', { month: 'short' })
+  return nombre.charAt(0).toUpperCase() + nombre.slice(1).replace('.', '')
+}
