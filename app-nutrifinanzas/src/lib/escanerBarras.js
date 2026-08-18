@@ -47,9 +47,10 @@ export const PERFILES = {
     ],
     // Los mismos formatos, con los nombres de la API nativa BarcodeDetector.
     formatosNativos: ['ean_13', 'ean_8', 'upc_a', 'upc_e'],
-    // Banda central del fotograma que se decodifica, en proporción sobre el
-    // total. Un código de barras es ancho y bajo, así que cogemos casi todo
-    // el ancho y poca altura. Coincide con el recuadro guía que ve el usuario.
+    // Banda central del ÁREA VISIBLE en pantalla que se decodifica (ver
+    // rectangulizarRecorte), en proporción. Un código de barras es ancho y
+    // bajo, así que cogemos casi todo el ancho y poca altura. Coincide con
+    // el recuadro guía que ve el usuario en Escanear.jsx.
     recorte: { ancho: 0.92, alto: 0.42 },
     // Un EAN-13 mal leído es raro (lleva dígito de control), pero un EAN-8 o
     // un UPC-E sí se cuelan de vez en cuando. Exigimos leer el mismo código
@@ -66,8 +67,12 @@ export const PERFILES = {
     formatosZxing: [BarcodeFormat.QR_CODE],
     formatosNativos: ['qr_code'],
     // Un QR es cuadrado y el usuario lo encuadra entero, así que aquí el
-    // recorte es un cuadrado amplio en vez de una banda.
-    recorte: { ancho: 0.8, alto: 0.8 },
+    // recorte es un cuadrado de verdad (cuadrado: true, ver
+    // rectangulizarRecorte), con el mismo lado (75% del ANCHO del
+    // contenedor) que el recuadro guía cuadrado de AnalizarCarta.jsx
+    // (`w-[75%] aspect-square`): lo que el usuario ve dentro del recuadro
+    // es exactamente lo que se decodifica.
+    recorte: { cuadrado: true, lado: 0.75 },
     // El QR lleva corrección de errores Reed-Solomon: si decodifica, es
     // correcto. Confirmar dos veces solo añadiría latencia.
     lecturasParaConfirmar: 1,
@@ -117,6 +122,74 @@ async function abrirCamara() {
   }
 
   return { stream, track }
+}
+
+// El <video> se pinta con `object-cover` (llena el contenedor recortando lo
+// que sobre), así que sus píxeles NATIVOS (video.videoWidth/Height, la
+// resolución que pidió la cámara) casi nunca coinciden con lo que el
+// usuario ve en pantalla: object-cover escala el vídeo hasta cubrir el
+// contenedor y recorta el eje que sobra. Decodificar un % del fotograma
+// NATIVO (como se hacía antes) recorta una zona que no es la que se ve, y
+// el recuadro guía en CSS (un % del contenedor) tampoco coincide con ella.
+// Con el código de barras (banda ancha y baja) el desajuste casi no se
+// notaba; con el QR (recuadro cuadrado y más ajustado) sí falla: el código
+// puede quedar fuera de la zona real que se decodifica aunque el usuario lo
+// vea centrado en el recuadro guía.
+//
+// Este cálculo deshace el `object-cover` a mano: primero halla qué parte
+// del fotograma nativo es la que realmente se ve (recortando lo que
+// object-cover recorta), y aplica `recorte` sobre ESA zona visible, no
+// sobre el fotograma entero. Así lo que se decodifica es lo que el
+// recuadro guía (ver AnalizarCarta.jsx y Escanear.jsx) le muestra al usuario.
+//
+// `recorte` admite dos formas:
+//   - { ancho, alto }: rectángulo, cada fracción sobre su eje. Vale para el
+//     código de barras (recuadro CSS ancho fijo en % + alto fijo en px: ya
+//     era una aproximación antes de este cambio, y lo sigue siendo, pero en
+//     la dirección segura — decodifica algo más de lo que se ve, nunca menos).
+//   - { cuadrado: true, lado }: un cuadrado de verdad. OJO, esto NO es lo
+//     mismo que { ancho: lado, alto: lado }: el contenedor en pantalla casi
+//     nunca es cuadrado (390×700, por ejemplo), así que aplicar la misma
+//     fracción a visibleW y a visibleH por separado da un RECTÁNGULO, no un
+//     cuadrado — 0.75 de 601 de ancho visible y 0.75 de 1080 de alto visible
+//     no son el mismo lado. El QR necesita un cuadrado real, así que el
+//     lado se calcula una sola vez a partir del ANCHO del contenedor (el
+//     mismo criterio que usa `w-[75%] aspect-square` en CSS) y se aplica
+//     igual a ambos ejes tras deshacer la escala de object-cover.
+function rectangulizarRecorte(video, recorte) {
+  const videoW = video.videoWidth
+  const videoH = video.videoHeight
+  const contenedorW = video.clientWidth
+  const contenedorH = video.clientHeight
+  if (!videoW || !videoH || !contenedorW || !contenedorH) return null
+
+  const escala = Math.max(contenedorW / videoW, contenedorH / videoH)
+  const visibleW = contenedorW / escala
+  const visibleH = contenedorH / escala
+  const offsetX = (videoW - visibleW) / 2
+  const offsetY = (videoH - visibleH) / 2
+
+  let ancho, alto
+  if (recorte.cuadrado) {
+    // Acotado a lo que quepa en el eje visible más corto: con el móvil en
+    // horizontal (contenedor más ancho que alto) el 75% del ancho puede
+    // superar la altura visible, y un cuadrado no puede ser más alto que
+    // lo que hay para recortar.
+    const lado = Math.min(
+      Math.round((contenedorW * recorte.lado) / escala),
+      Math.floor(visibleW),
+      Math.floor(visibleH)
+    )
+    ancho = lado
+    alto = lado
+  } else {
+    ancho = Math.round(visibleW * recorte.ancho)
+    alto = Math.round(visibleH * recorte.alto)
+  }
+
+  const x = Math.round(offsetX + (visibleW - ancho) / 2)
+  const y = Math.round(offsetY + (visibleH - alto) / 2)
+  return { x, y, ancho, alto }
 }
 
 // Espera a que el vídeo tenga dimensiones reales. En iOS el elemento puede
@@ -217,23 +290,22 @@ export async function iniciarEscaner(video, onDetectado, onError, tipo = 'barras
     const intentar = async () => {
       if (!activo) return
 
-      const anchoRecorte = Math.round(video.videoWidth * perfil.recorte.ancho)
-      const altoRecorte = Math.round(video.videoHeight * perfil.recorte.alto)
-      if (anchoRecorte > 0 && altoRecorte > 0) {
-        if (canvas.width !== anchoRecorte || canvas.height !== altoRecorte) {
-          canvas.width = anchoRecorte
-          canvas.height = altoRecorte
+      const rect = rectangulizarRecorte(video, perfil.recorte)
+      if (rect && rect.ancho > 0 && rect.alto > 0) {
+        if (canvas.width !== rect.ancho || canvas.height !== rect.alto) {
+          canvas.width = rect.ancho
+          canvas.height = rect.alto
         }
         ctx.drawImage(
           video,
-          Math.round((video.videoWidth - anchoRecorte) / 2),
-          Math.round((video.videoHeight - altoRecorte) / 2),
-          anchoRecorte,
-          altoRecorte,
+          rect.x,
+          rect.y,
+          rect.ancho,
+          rect.alto,
           0,
           0,
-          anchoRecorte,
-          altoRecorte
+          rect.ancho,
+          rect.alto
         )
 
         let codigo = null

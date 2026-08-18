@@ -406,8 +406,18 @@ function VisorQr({ onDetectado, onErrorCamara, analizando }) {
         <video ref={videoRef} muted playsInline autoPlay className="w-full h-full object-cover" />
       </div>
 
+      {/* w-[75%] + aspect-square: mismo 75% que perfil.recorte 'qr' en
+          lib/escanerBarras.js. Antes era un cuadrado de tamaño fijo (256px)
+          que no coincidía con la zona que de verdad se decodificaba (esa se
+          calculaba sobre la resolución nativa de la cámara, no sobre lo que
+          `object-cover` muestra en pantalla) — lo que se veía en el
+          recuadro y lo que se leía eran dos cosas distintas, así que un QR
+          bien encuadrado a ojos del usuario podía caer fuera de la zona
+          real. rectangulizarRecorte() en escanerBarras.js corrige eso: este
+          recuadro es ahora, en porcentaje del contenedor, exactamente igual
+          a la zona decodificada. */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="relative w-64 h-64">
+        <div className="relative w-[75%] aspect-square">
           <EsquinaQr clases="top-0 left-0 border-t-4 border-l-4 rounded-tl-2xl" />
           <EsquinaQr clases="top-0 right-0 border-t-4 border-r-4 rounded-tr-2xl" />
           <EsquinaQr clases="bottom-0 left-0 border-b-4 border-l-4 rounded-bl-2xl" />
