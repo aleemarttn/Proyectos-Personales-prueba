@@ -379,7 +379,14 @@ export default function RegistrarComida() {
 
       <div className="px-5 py-4 space-y-3">
         {tab === 'recientes' && (
-          <div className="space-y-2 max-h-64 overflow-y-auto no-scrollbar">
+          // p-1 -mt-1 en las tres listas de opciones (aquí, despensa y
+          // catálogo): con solo overflow-y-auto (sin overflow-x explícito),
+          // el navegador trata TAMBIÉN el eje horizontal como recortado —
+          // así que el ring-2 verde de OpcionAlimento se cortaba por los
+          // lados, y por arriba/abajo al no haber hueco para él. El padding
+          // le da sitio dentro de la zona no recortada; el margen negativo
+          // deshace el desplazamiento para que la lista no baje visualmente.
+          <div className="space-y-2 max-h-64 overflow-y-auto no-scrollbar p-1 -mt-1">
             {cargandoRecientes && (
               <div className="flex justify-center py-6">
                 <Loader2 className="animate-spin text-brand-400" size={24} />
@@ -424,7 +431,7 @@ export default function RegistrarComida() {
         )}
 
         {tab === 'despensa' && (
-          <div className="space-y-2 max-h-64 overflow-y-auto no-scrollbar">
+          <div className="space-y-2 max-h-64 overflow-y-auto no-scrollbar p-1 -mt-1">
             {alimentos.length === 0 && (
               <p className="text-center text-gray-400 text-sm py-6">Tu despensa está vacía.</p>
             )}
@@ -457,7 +464,7 @@ export default function RegistrarComida() {
                 {buscandoCatalogo ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
               </button>
             </div>
-            <div className="space-y-2 max-h-56 overflow-y-auto no-scrollbar">
+            <div className="space-y-2 max-h-56 overflow-y-auto no-scrollbar p-1 -mt-1">
               {resultadosCatalogo.map((p) => (
                 <OpcionAlimento
                   key={p.codigoBarras}
