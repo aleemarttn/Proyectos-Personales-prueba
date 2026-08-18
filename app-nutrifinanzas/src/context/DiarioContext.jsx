@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
+import { supabase, conReintentoDeSesion } from '../lib/supabase.js'
 import { useAuth } from './AuthContext.jsx'
 import { hoyISO, semanaDe, sumarDias } from '../lib/fechas.js'
 import { nutrientesAFila, nutrientesDeFila } from '../lib/nutrientes.js'
@@ -86,10 +86,9 @@ export function DiarioProvider({ children }) {
   const claveSemana = semana[0]
 
   async function cargarResumen() {
-    const { data, error: err } = await supabase
-      .from('resumen_diario')
-      .select('*')
-      .maybeSingle()
+    const { data, error: err } = await conReintentoDeSesion(() =>
+      supabase.from('resumen_diario').select('*').maybeSingle()
+    )
 
     if (err) {
       console.error('Error cargando el resumen diario:', err)
@@ -110,8 +109,10 @@ export function DiarioProvider({ children }) {
     let activo = true
 
     Promise.all([
-      supabase.from('resumen_diario').select('*').maybeSingle(),
-      supabase.from('comidas_usuario').select('*').order('orden', { ascending: true }),
+      conReintentoDeSesion(() => supabase.from('resumen_diario').select('*').maybeSingle()),
+      conReintentoDeSesion(() =>
+        supabase.from('comidas_usuario').select('*').order('orden', { ascending: true })
+      ),
     ]).then(([resumenFila, comidasFilas]) => {
       if (!activo) return
       if (resumenFila.error) {
@@ -143,22 +144,23 @@ export function DiarioProvider({ children }) {
     setCargando(true)
     setError('')
 
-    supabase
-      .from('registros_diarios')
-      .select('*')
-      .gte('fecha', claveSemana)
-      .lte('fecha', sumarDias(claveSemana, 6))
-      .order('created_at', { ascending: true })
-      .then(({ data, error: err }) => {
-        if (!activo) return
-        if (err) {
-          console.error('Error cargando el diario:', err)
-          setError('No se pudo cargar tu diario.')
-        } else {
-          setRegistros(data.map(filaARegistro))
-        }
-        setCargando(false)
-      })
+    conReintentoDeSesion(() =>
+      supabase
+        .from('registros_diarios')
+        .select('*')
+        .gte('fecha', claveSemana)
+        .lte('fecha', sumarDias(claveSemana, 6))
+        .order('created_at', { ascending: true })
+    ).then(({ data, error: err }) => {
+      if (!activo) return
+      if (err) {
+        console.error('Error cargando el diario:', err)
+        setError('No se pudo cargar tu diario.')
+      } else {
+        setRegistros(data.map(filaARegistro))
+      }
+      setCargando(false)
+    })
 
     return () => {
       activo = false

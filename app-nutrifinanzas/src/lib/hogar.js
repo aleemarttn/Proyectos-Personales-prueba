@@ -1,4 +1,4 @@
-import { supabase } from './supabase.js'
+import { supabase, conReintentoDeSesion } from './supabase.js'
 
 // Despensa compartida. Crear un hogar, unirse por código, salir y ver quién
 // más está dentro. Todo pasa por funciones de la base de datos (migración
@@ -50,12 +50,14 @@ function filaAHogar(fila, miembros = []) {
 // Devuelve el hogar del usuario con sus miembros, o null si no está en
 // ninguno. La política de lectura ya filtra: como mucho hay una fila.
 export async function cargarHogar() {
-  const { data, error } = await supabase.from('hogares').select('*').limit(1)
+  const { data, error } = await conReintentoDeSesion(() =>
+    supabase.from('hogares').select('*').limit(1)
+  )
   if (error) throw error
   if (!data || data.length === 0) return null
 
-  const { data: miembros, error: errMiembros } = await supabase.rpc(
-    'miembros_de_mi_hogar'
+  const { data: miembros, error: errMiembros } = await conReintentoDeSesion(() =>
+    supabase.rpc('miembros_de_mi_hogar')
   )
   if (errMiembros) throw errMiembros
 

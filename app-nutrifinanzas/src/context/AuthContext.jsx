@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
+import { supabase, conReintentoDeSesion } from '../lib/supabase.js'
 import * as hogares from '../lib/hogar.js'
 
 // Este contexto gestiona la AUTENTICACIÓN (sesión de Supabase) y el PERFIL
@@ -70,11 +70,9 @@ export function AuthProvider({ children }) {
 
   // Lee el perfil del usuario desde Supabase, actualiza el estado y lo devuelve.
   async function cargarPerfil(userId) {
-    const { data, error } = await supabase
-      .from('perfiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle()
+    const { data, error } = await conReintentoDeSesion(() =>
+      supabase.from('perfiles').select('*').eq('id', userId).maybeSingle()
+    )
 
     if (error) {
       console.error('Error cargando el perfil:', error)
