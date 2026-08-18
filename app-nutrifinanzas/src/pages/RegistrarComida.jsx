@@ -119,7 +119,10 @@ export default function RegistrarComida() {
 
   // Selecciona un alimento/producto y resetea la cantidad: por defecto en
   // unidades si tiene peso por unidad guardado (es lo más rápido), si no en
-  // gramos.
+  // gramos. Se llama con `null` para deseleccionar (los onClick de
+  // OpcionAlimento comprueban si ya estaba elegido y alternan), así el
+  // usuario puede arrepentirse tocando otra vez en vez de tener que salir
+  // de la pantalla.
   function elegir(item) {
     setSeleccionado(item)
     setCantidadG('')
@@ -403,7 +406,9 @@ export default function RegistrarComida() {
                 key={r.clave}
                 item={r}
                 seleccionado={seleccionado?.nombre === r.nombre}
-                onClick={() => elegirReciente(r)}
+                onClick={() =>
+                  seleccionado?.nombre === r.nombre ? elegir(null) : elegirReciente(r)
+                }
                 detalle={
                   r.veces > 1
                     ? `${r.veces} veces · ${
@@ -428,7 +433,7 @@ export default function RegistrarComida() {
                 key={a.id}
                 item={a}
                 seleccionado={seleccionado?.id === a.id}
-                onClick={() => elegir(a)}
+                onClick={() => elegir(seleccionado?.id === a.id ? null : a)}
               />
             ))}
           </div>
@@ -458,7 +463,9 @@ export default function RegistrarComida() {
                   key={p.codigoBarras}
                   item={p}
                   seleccionado={seleccionado?.codigoBarras === p.codigoBarras}
-                  onClick={() => elegir(p)}
+                  onClick={() =>
+                    elegir(seleccionado?.codigoBarras === p.codigoBarras ? null : p)
+                  }
                 />
               ))}
             </div>
