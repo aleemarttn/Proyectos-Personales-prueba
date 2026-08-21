@@ -111,10 +111,6 @@ export function esMesActual(mesISO) {
   return mesISO === mesActualISO()
 }
 
-export function esMesFuturo(mesISO) {
-  return mesISO > mesActualISO()
-}
-
 // "agosto 2026" (sin año si es el actual, con año si no — igual que fechaLarga)
 export function nombreMes(mesISO) {
   const fecha = desdeISO(mesISO)

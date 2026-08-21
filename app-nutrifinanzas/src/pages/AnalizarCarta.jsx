@@ -26,7 +26,7 @@ import { objetivoRestanteHoy } from '../lib/macros.js'
 
 const MAX_PAGINAS = 6
 
-// Modo Restaurante (PLAN-modo-restaurante.md): la carta rara vez cabe en una
+// Modo Restaurante: la carta rara vez cabe en una
 // sola foto (varias hojas) o directamente no es una foto (QR de la mesa que
 // lleva a un PDF o a una web). Tres entradas, todas resueltas por el mismo
 // modo 'carta' de la Edge Function:

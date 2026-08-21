@@ -4,7 +4,7 @@
 // La clave GEMINI_API_KEY se lee como secreto de Supabase, nunca del frontend.
 //
 // El modo 'carta' admite tres formas de entrada porque una carta real casi
-// nunca cabe en una sola foto (ver PLAN-modo-restaurante.md):
+// nunca cabe en una sola foto:
 //   - `paginas`: hasta 6 fotos (carta de varias hojas) o un PDF subido.
 //   - `url`: el enlace del QR de la mesa. Lo descarga ESTA función, no el
 //     navegador — ver descargarCarta() para las protecciones anti-SSRF.

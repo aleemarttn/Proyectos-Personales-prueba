@@ -4,9 +4,6 @@
 
 export const MAX_COMIDAS = 7
 
-// Las 3 que crea la base de datos para todo usuario nuevo.
-export const COMIDAS_POR_DEFECTO = ['Desayuno', 'Comida', 'Cena']
-
 // Sugerencias al añadir una comida (enfoque deportivo). Son solo atajos:
 // el usuario puede escribir el nombre que quiera.
 export const SUGERENCIAS = [

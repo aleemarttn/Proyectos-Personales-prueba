@@ -3,7 +3,6 @@ dist
 .DS_Store
 *.local
 .vite
-.netlify
 
 # Caché de la CLI de Supabase (se crea al desplegar Edge Functions)
 supabase/.temp

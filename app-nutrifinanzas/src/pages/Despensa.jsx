@@ -74,7 +74,7 @@ export default function Despensa() {
       </div>
 
       {/* Modo Restaurante: fotografiar la carta y que te recomiende un
-          plato (PLAN-modo-restaurante.md). Fila propia porque no compite
+          plato. Fila propia porque no compite
           con "Añadir"/"Escanear" (esos van a la despensa; esto va al Diario
           o solo a una recomendación, según el modo). */}
       <div data-tour="foto-restaurante" className="px-5 mb-5">
