@@ -202,7 +202,7 @@ export default function TourGuiado({ activo, tipo = 'despensa' }) {
       // migración o hay una interrupción puntual de red.
       console.error('No se pudo marcar el tour como visto:', error)
     })
-  }, [activo, sesion, perfil?.tipo, perfil?.[config.campoPerfil], config, auth])
+  }, [activo, sesion, perfil, perfil?.tipo, perfil?.[config.campoPerfil], config, auth])
 
   // Las tarjetas de Perfil están una debajo de otra. Al cambiar de paso,
   // llevamos el objetivo a la vista para que el foco no señale contenido

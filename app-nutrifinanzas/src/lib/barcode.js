@@ -56,7 +56,7 @@ export async function consultarOpenFoodFacts(codigo) {
     )
     if (!resp.ok) throw new Error(`Open Food Facts respondió ${resp.status}`)
     datos = await resp.json()
-  } catch (e) {
+  } catch {
     throw new Error('No se pudo consultar la base de datos de productos.')
   }
 

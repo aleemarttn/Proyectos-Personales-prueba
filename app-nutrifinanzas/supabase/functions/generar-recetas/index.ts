@@ -109,6 +109,13 @@ Deno.serve(async (req) => {
     })
   } catch (e) {
     console.error('Error en generar-recetas:', e)
+    if (e instanceof Error && e.message === 'MODELO_SATURADO') {
+      return jsonError(
+        'La IA está saturada ahora mismo. Espera unos segundos y vuelve a intentarlo.',
+        503,
+        CORS_HEADERS
+      )
+    }
     if (e instanceof Error && e.message === 'CUOTA_EXCEDIDA') {
       return jsonError(
         'Se ha alcanzado el límite de peticiones a la IA por ahora. Espera unos minutos e inténtalo de nuevo.',
@@ -272,7 +279,13 @@ async function llamarGemini(prompt: string) {
     }
     const esTransitorio = respuesta.status === 503
     if (!esTransitorio || intento === intentosMax) {
-      throw new Error(`Gemini respondió ${respuesta.status}: ${texto}`)
+      console.error(`Gemini respondió ${respuesta.status}: ${texto}`)
+      // Un 503 que agota los reintentos NO es un fallo de la app: el modelo
+      // está saturado (pasa a menudo en el tier gratuito en horas punta). Se
+      // distingue del resto de errores para poder decírselo al usuario con
+      // esas palabras, en vez de un "no se pudieron generar recetas" a secas
+      // que parece que la app está rota y no invita a reintentar.
+      throw new Error(esTransitorio ? 'MODELO_SATURADO' : `Gemini respondió ${respuesta.status}`)
     }
     await new Promise((r) => setTimeout(r, 700 * intento))
   }

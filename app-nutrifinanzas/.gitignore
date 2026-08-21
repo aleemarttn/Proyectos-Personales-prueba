@@ -5,6 +5,9 @@ dist
 .vite
 .netlify
 
+# Caché de la CLI de Supabase (se crea al desplegar Edge Functions)
+supabase/.temp
+
 # Variables de entorno (claves de Supabase, etc.) — NUNCA subir al repo
 .env
 .env.*

@@ -122,14 +122,24 @@ http://localhost:5173
    - **Sencilla:** solo nombre, edad, género y comunidad autónoma/provincia (sin macros).
 4. **Despensa:** empieza vacía (cada cuenta tiene la suya). Puedes:
    - **Añadir** un alimento a mano.
-   - **Escanear** un ticket o un código de barras: la foto se analiza con IA
-     (Gemini) y rellena los productos detectados.
+   - **Escanear** un ticket, un código de barras, un producto suelto o una
+     tabla nutricional: la foto se analiza con IA (Gemini) y rellena los
+     datos detectados.
    - **Eliminar** alimentos con la papelera.
-5. **Gastos:** gasto total, gráfico de tarta por categoría, barras por
+5. **Diario** (solo modo "Control total"): registra tus comidas del día,
+   compara contra tu objetivo de kcal/macros y lleva la cuenta del ayuno
+   intermitente si lo usas.
+6. **Gastos:** gasto total, gráfico de tarta por categoría, barras por
    supermercado y lista de últimas compras.
-6. **Recetas:** pantalla "Próximamente" (aún no construida, es a propósito).
-7. **Perfil:** muestra tus datos y, si elegiste "Control total", tus macros.
-   Abajo hay un botón **"Cerrar sesión"**.
+7. **Recetas:** sugerencias generadas por IA a partir de lo que ya tienes en
+   la despensa (combinaciones habituales, no una mezcla forzada de todo).
+   En modo "Control total" tiene en cuenta lo que te queda hoy de macros.
+8. **¿Qué pido?** (modo restaurante): haz una foto a la carta de un
+   restaurante y la IA te recomienda un plato — en modo completo, ajustado a
+   lo que te queda de macros ese día — con la opción de registrarlo en el
+   Diario.
+9. **Perfil:** muestra tus datos y, si elegiste "Control total", tus macros y
+   tu ayuno. Abajo hay un botón **"Cerrar sesión"**.
 
 > **Tu cuenta, tu perfil y tu despensa se guardan en la nube** (Supabase):
 > puedes cerrar sesión y volver a entrar desde cualquier sitio y todo seguirá
@@ -179,7 +189,10 @@ app-nutrifinanzas/
 │   ├── utils/              (formato de euros y fechas)
 │   └── pages/              (las pantallas: Bienvenida, Login, Registro,
 │                            Onboarding, Despensa, AñadirAlimento, Escanear,
-│                            Gastos, Recetas, Perfil)
+│                            ConfirmarEscaneo, AnalizarCarta, ConfirmarCarta,
+│                            Diario, RegistrarComida, Gastos, Recetas, Perfil)
 └── supabase/
-    └── schema.sql          (esquema de la base de datos)
+    ├── schema.sql          (esquema completo de la base de datos)
+    ├── migrations/         (historial incremental de cambios al esquema)
+    └── functions/          (Edge Functions: analizar-imagen, generar-recetas)
 ```
