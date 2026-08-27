@@ -8,6 +8,7 @@ import SupermercadoSelector from '../components/SupermercadoSelector.jsx'
 import SelectorUnidad from '../components/SelectorUnidad.jsx'
 import { adivinarUnidad } from '../utils/unidades.js'
 import { aNumero } from '../utils/numero.js'
+import { NUTRIENTES, nutrientesDe } from '../lib/nutrientes.js'
 
 // Formulario para añadir un alimento. Si venimos del escáner, llega
 // con datos ya rellenados (location.state.prefill).
@@ -26,6 +27,10 @@ export default function AnadirAlimento() {
     proteinas: prefill.proteinas ?? '',
     hidratos: prefill.hidratos ?? '',
     grasas: prefill.grasas ?? '',
+    // Saturadas, azúcares, sal y fibra. Llegan rellenos si el alimento vino
+    // del código de barras (Open Food Facts los devuelve), y si no se pueden
+    // escribir a mano como cualquier otro macro.
+    ...Object.fromEntries(NUTRIENTES.map(({ campo }) => [campo, prefill[campo] ?? ''])),
     precio: prefill.precio || '',
     supermercado: prefill.supermercado || SUPERMERCADO_POR_DEFECTO,
     categoria: prefill.categoria || 'Otros',
@@ -58,6 +63,11 @@ export default function AnadirAlimento() {
       proteinas: nutricion.proteinas ?? f.proteinas,
       hidratos: nutricion.hidratos ?? f.hidratos,
       grasas: nutricion.grasas ?? f.grasas,
+      // Lo que la etiqueta no diga llega como null y no debe borrar lo que
+      // ya hubiera escrito.
+      ...Object.fromEntries(
+        NUTRIENTES.map(({ campo }) => [campo, nutricion[campo] ?? f[campo]]),
+      ),
     }))
     setMostrarEscaner(false)
     setAvisoMacros('Macros rellenados desde la etiqueta. Revísalos antes de guardar.')
@@ -77,6 +87,11 @@ export default function AnadirAlimento() {
           proteinas: aNumero(form.proteinas),
           hidratos: aNumero(form.hidratos),
           grasas: aNumero(form.grasas),
+          ...nutrientesDe(
+            Object.fromEntries(
+              NUTRIENTES.map(({ campo }) => [campo, aNumero(form[campo])]),
+            ),
+          ),
           precio: aNumero(form.precio) ?? 0,
           supermercado: form.supermercado,
           categoria: form.categoria,
@@ -250,6 +265,27 @@ export default function AnadirAlimento() {
                 onChange={(v) => set('grasas', v)}
                 placeholder="1,5"
               />
+            </div>
+
+            {/* Desglose, en bloque aparte igual que en la etiqueta de un
+                envase ("de las cuales saturadas", "de los cuales
+                azúcares"…). Es opcional: son los cuatro que alimentan los
+                avisos de avisos.js, y sin ellos el alimento simplemente no
+                genera ninguno. */}
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mt-4 mb-2">
+              Desglose (opcional)
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {NUTRIENTES.map(({ campo, etiqueta, unidad }) => (
+                <Campo
+                  key={campo}
+                  label={`${etiqueta} (${unidad})`}
+                  tipo="number"
+                  valor={form[campo]}
+                  onChange={(v) => set(campo, v)}
+                  placeholder="—"
+                />
+              ))}
             </div>
         </div>
 

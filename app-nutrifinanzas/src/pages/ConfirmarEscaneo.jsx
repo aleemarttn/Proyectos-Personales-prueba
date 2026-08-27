@@ -97,12 +97,13 @@ export default function ConfirmarEscaneo() {
               proteinas: nutricion.proteinas ?? it.proteinas,
               hidratos: nutricion.hidratos ?? it.hidratos,
               grasas: nutricion.grasas ?? it.grasas,
-              // La IA que lee la etiqueta ya devolvía azúcares y sal, pero
-              // se tiraban. Saturadas y fibra todavía no las lee (haría
-              // falta redesplegar la Edge Function), así que se conservan
-              // las que hubiera del código de barras.
+              // La IA lee los cuatro desde la etiqueta. Lo que no consiga
+              // leer llega como null y conserva lo que trajera el código de
+              // barras: null nunca pisa un dato bueno.
+              grasasSaturadas: nutricion.grasasSaturadas ?? it.grasasSaturadas,
               azucares: nutricion.azucares ?? it.azucares,
               sal: nutricion.sal ?? it.sal,
+              fibra: nutricion.fibra ?? it.fibra,
             }
           : it
       )

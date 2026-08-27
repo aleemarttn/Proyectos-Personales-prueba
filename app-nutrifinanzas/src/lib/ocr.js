@@ -24,7 +24,8 @@ export async function analizarNutricion(imagenBase64, mimeType = 'image/jpeg') {
   if (error) throw new Error(await mensajeErrorFuncion(error, 'No se pudo analizar la imagen.'))
   if (data?.error) throw new Error(data.error)
 
-  // { nutricion: { por, kcal, proteinas, hidratos, grasas, azucares, sal } }
+  // { nutricion: { por, kcal, proteinas, hidratos, grasas,
+  //                grasasSaturadas, azucares, sal, fibra } }
   return data?.nutricion || null
 }
 

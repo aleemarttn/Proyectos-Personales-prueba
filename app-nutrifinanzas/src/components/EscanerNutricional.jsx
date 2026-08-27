@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { analizarNutricion } from '../lib/ocr.js'
 import { comprimirImagen } from '../utils/imagen.js'
+import CapaModal from './CapaModal.jsx'
 
 // Modal a pantalla completa para fotografiar la TABLA DE INFORMACIÓN
 // NUTRICIONAL de un producto. Al detectar los macros (por 100 g/ml) llama
@@ -72,7 +73,10 @@ export default function EscanerNutricional({ onCerrar, onDetectado }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-gray-900 text-white overflow-hidden animate-fade-in">
+    <CapaModal
+      onCerrar={onCerrar}
+      className="z-50 bg-gray-900 text-white overflow-hidden animate-fade-in"
+    >
       <button
         onClick={onCerrar}
         className="absolute top-[calc(env(safe-area-inset-top)+1.25rem)] right-5 z-20 w-11 h-11 rounded-full bg-white/15 backdrop-blur flex items-center justify-center active:scale-95 transition"
@@ -174,6 +178,6 @@ export default function EscanerNutricional({ onCerrar, onDetectado }) {
         className="hidden"
         onChange={elegirArchivo}
       />
-    </div>
+    </CapaModal>
   )
 }

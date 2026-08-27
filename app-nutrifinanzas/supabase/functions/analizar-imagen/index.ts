@@ -515,8 +515,10 @@ Analiza la imagen y devuelve SOLO un JSON (sin markdown, sin texto adicional) co
   "proteinas": numero_decimal_o_null,
   "hidratos": numero_decimal_o_null,
   "grasas": numero_decimal_o_null,
+  "grasas_saturadas": numero_decimal_o_null,
   "azucares": numero_decimal_o_null,
-  "sal": numero_decimal_o_null
+  "sal": numero_decimal_o_null,
+  "fibra": numero_decimal_o_null
 }
 
 Reglas IMPORTANTES:
@@ -525,6 +527,13 @@ Reglas IMPORTANTES:
 - "kcal": usa las kilocalorías (kcal). Si solo aparecen kJ, conviértelas (1 kcal ≈ 4,184 kJ).
 - "hidratos": son los "hidratos de carbono" totales (no solo los azúcares).
 - "grasas": son las grasas totales (no solo las saturadas).
+- "grasas_saturadas": la línea "de las cuales saturadas". Es un SUBCONJUNTO de "grasas",
+  así que nunca puede ser mayor que ellas.
+- "azucares": la línea "de los cuales azúcares", subconjunto de "hidratos".
+- "sal": si la tabla da SODIO en vez de sal, conviértelo (sal = sodio × 2,5). Si viene en
+  miligramos, pásalo a gramos.
+- "fibra": la "fibra alimentaria". Muchas etiquetas españolas no la declaran; si no
+  aparece, pon null.
 - Usa punto decimal, no coma. Si un valor no aparece o no puedes leerlo, pon null (no lo inventes).
 Responde ÚNICAMENTE con el JSON, nada más.`
   }
@@ -729,8 +738,12 @@ function normalizarNutricion(json: any) {
       proteinas: num(json?.proteinas),
       hidratos: num(json?.hidratos),
       grasas: num(json?.grasas),
+      // camelCase porque es como viajan por la app (ver src/lib/nutrientes.js);
+      // el prompt los pide en snake_case porque es más legible en la etiqueta.
+      grasasSaturadas: num(json?.grasas_saturadas),
       azucares: num(json?.azucares),
       sal: num(json?.sal),
+      fibra: num(json?.fibra),
     },
   }
 }

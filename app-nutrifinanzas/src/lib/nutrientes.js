@@ -7,7 +7,19 @@
 // Son SIEMPRE opcionales: un alimento antiguo (o dado de alta a mano) no
 // los tiene, y eso está bien — simplemente no generará avisos.
 
-export const CAMPOS_NUTRIENTES = ['grasasSaturadas', 'azucares', 'sal', 'fibra']
+// Cómo se pintan los cuatro. Vive aquí y no en cada pantalla para que la
+// ficha de la despensa y el alta manual los enseñen con el mismo nombre, la
+// misma unidad y en el mismo orden (el de la etiqueta de un envase real:
+// primero el desglose de la grasa, luego el del hidrato, y al final sal y
+// fibra).
+export const NUTRIENTES = [
+  { campo: 'grasasSaturadas', etiqueta: 'Saturadas', unidad: 'g', color: '#eab308' },
+  { campo: 'azucares', etiqueta: 'Azúcares', unidad: 'g', color: '#f59e0b' },
+  { campo: 'sal', etiqueta: 'Sal', unidad: 'g', color: '#64748b' },
+  { campo: 'fibra', etiqueta: 'Fibra', unidad: 'g', color: '#84cc16' },
+]
+
+export const CAMPOS_NUTRIENTES = NUTRIENTES.map((n) => n.campo)
 
 const A_COLUMNA = {
   grasasSaturadas: 'grasas_saturadas',
@@ -51,6 +63,15 @@ export function nutrientesDe(objeto) {
     salida[campo] = objeto?.[campo] ?? null
   }
   return salida
+}
+
+// El sodio NO se guarda: en la UE las etiquetas declaran SAL, y la relación
+// es exacta (sal = sodio × 2,5, por el peso molecular del cloruro sódico).
+// Así que se calcula al vuelo en vez de añadir una columna que sería siempre
+// redundante. Devuelve null si no hay sal registrada.
+export function sodioDeSal(sal) {
+  const n = aNumeroONull(sal)
+  return n === null ? null : n / 2.5
 }
 
 // Escala los cuatro a la cantidad consumida (vienen por 100 g/ml), igual
